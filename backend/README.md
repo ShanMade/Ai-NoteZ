@@ -83,8 +83,11 @@ celery -A app.core.celery_app:celery_app worker -Q default,indexing,transcriptio
 celery -A app.core.celery_app:celery_app beat
 ```
 
-Configure PostgreSQL, Redis, Firebase Admin credentials, exact HTTPS `CORS_ORIGINS`, and
-`PUBLIC_FRONTEND_URL` in the hosting provider's environment or secret manager. Set `GEMINI_API_KEY`
+Configure PostgreSQL, Redis, Firebase Admin credentials, and
+`PUBLIC_FRONTEND_URL=https://ai-notez.web.app` in the hosting provider's environment or secret
+manager. The public frontend URL is automatically allowed by the v2 API's CORS middleware; set
+`CORS_ORIGINS` to a comma-separated list when allowing additional exact origins. The legacy API
+uses the separate `NOTEZ_CORS_ORIGINS` setting. Set `GEMINI_API_KEY`
 for managed AI and transcription; configure `QDRANT_URL` (and `QDRANT_API_KEY` when required) for
 semantic retrieval. Configure all four `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` values to share recording audio across API/worker
