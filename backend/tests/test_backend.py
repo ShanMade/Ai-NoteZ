@@ -4,7 +4,9 @@ import math
 
 import pytest
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
+import app.firebase as firebase_module
 from app.auth import current_user
 from app.config import settings
 from app.main import app
@@ -156,11 +158,153 @@ def test_config_requires_a_verified_identity():
     assert response.status_code == 401
 
 
+def test_firebase_app_uses_service_account_json_secret(monkeypatch):
+    from types import SimpleNamespace
+
+    service_account = {"type": "service_account", "project_id": "ai-notez"}
+    sentinel = object()
+    initialized = {}
+    monkeypatch.setattr(firebase_module, "_app", None)
+    monkeypatch.setattr(
+        firebase_module,
+        "settings",
+        SimpleNamespace(
+            firebase_project_id="ai-notez",
+            database_url="https://ai-notez-default-rtdb.firebaseio.com",
+            firebase_service_account_json='{"type":"service_account","project_id":"ai-notez"}',
+        ),
+    )
+    monkeypatch.setattr(firebase_module.firebase_admin, "get_app", lambda: (_ for _ in ()).throw(ValueError()))
+    monkeypatch.setattr(firebase_module.credentials, "Certificate", lambda info: ("credential", info))
+    monkeypatch.setattr(
+        firebase_module.firebase_admin,
+        "initialize_app",
+        lambda **kwargs: initialized.update(kwargs) or sentinel,
+    )
+
+    assert firebase_module.firebase_app() is sentinel
+    assert initialized["credential"] == ("credential", service_account)
+    assert initialized["options"]["projectId"] == "ai-notez"
+    assert initialized["options"]["databaseURL"] == "https://ai-notez-default-rtdb.firebaseio.com"
+
+
+def test_firebase_app_reports_invalid_service_account_json(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(firebase_module, "_app", None)
+    monkeypatch.setattr(
+        firebase_module,
+        "settings",
+        SimpleNamespace(
+            firebase_project_id="ai-notez",
+            database_url="",
+            firebase_service_account_json="not-json",
+        ),
+    )
+    monkeypatch.setattr(firebase_module.firebase_admin, "get_app", lambda: (_ for _ in ()).throw(ValueError()))
+
+    with pytest.raises(RuntimeError, match="FIREBASE_SERVICE_ACCOUNT_JSON must contain valid"):
+        firebase_module.firebase_app()
+
+
+def test_missing_firebase_admin_credentials_return_service_unavailable(monkeypatch):
+    from google.auth.exceptions import DefaultCredentialsError
+
+    monkeypatch.setattr(firebase_module, "firebase_app", lambda: object())
+    monkeypatch.setattr(
+        firebase_module.auth,
+        "verify_id_token",
+        lambda *args, **kwargs: (_ for _ in ()).throw(DefaultCredentialsError("missing ADC")),
+    )
+    app.dependency_overrides[current_user] = lambda: current_user("Bearer test-token")
+    try:
+        response = TestClient(app).get("/v1/config")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert "FIREBASE_SERVICE_ACCOUNT_JSON" in response.json()["detail"]
+
+
 def test_health_check_reports_local_hnsw_store():
     response = TestClient(app).get("/healthz")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "vectorStore": "usearch-hnsw"}
+
+
+def test_request_limiter_scopes_users_and_reports_retry_after(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(main_module.time, "monotonic", lambda: now[0])
+    limiter = main_module.RequestLimiter(limit=2, window_seconds=60)
+
+    async def run():
+        await limiter.check("user-a")
+        await limiter.check("user-a")
+        await limiter.check("user-b")
+        with pytest.raises(HTTPException) as error:
+            await limiter.check("user-a")
+        assert error.value.status_code == 429
+        assert error.value.headers == {"Retry-After": "60"}
+        now[0] = 160.0
+        await limiter.check("user-a")
+
+    asyncio.run(run())
+
+
+def test_anonymous_user_can_use_managed_ai_with_guest_rate_limit(monkeypatch):
+    calls = []
+
+    async def fake_generate(provider, model, api_key, prompt, system_prompt, temperature, json_mode, images):
+        calls.append(prompt)
+        return {"text": "answer", "provider": provider, "model": model}
+
+    monkeypatch.setattr(main_module, "guest_limiter", main_module.RequestLimiter(limit=1, window_seconds=60))
+    monkeypatch.setattr(main_module, "configured_providers", lambda: ["gemini"])
+    monkeypatch.setattr(main_module, "provider_key", lambda provider: "configured-test-key")
+    monkeypatch.setattr(main_module, "generate", fake_generate)
+    app.dependency_overrides[current_user] = lambda: {
+        "uid": "guest-user",
+        "firebase": {"sign_in_provider": "anonymous"},
+    }
+    try:
+        client = TestClient(app)
+        payload = {"provider": "gemini", "prompt": "Explain this note."}
+        first = client.post("/v1/ai/generate", json=payload)
+        second = client.post("/v1/ai/generate", json=payload)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert first.json()["text"] == "answer"
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "60"
+    assert calls == ["Explain this note."]
+
+
+def test_anonymous_ai_rejects_long_prompts_and_images(monkeypatch):
+    app.dependency_overrides[current_user] = lambda: {
+        "uid": "guest-user",
+        "firebase": {"sign_in_provider": "anonymous"},
+    }
+    try:
+        client = TestClient(app)
+        long_prompt = client.post(
+            "/v1/ai/generate",
+            json={"prompt": "x" * (settings.guest_max_prompt_chars + 1)},
+        )
+        image_prompt = client.post(
+            "/v1/ai/generate",
+            json={
+                "prompt": "Describe this image.",
+                "images": [{"mime": "image/png", "data": "aGVsbG8="}],
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert long_prompt.status_code == 413
+    assert image_prompt.status_code == 403
 
 
 def test_generation_routes_byok_through_shared_service(monkeypatch):

@@ -538,6 +538,7 @@
             inMemoryPersistence: authModule.inMemoryPersistence,
             GoogleAuthProvider: authModule.GoogleAuthProvider,
             signInWithPopup: authModule.signInWithPopup,
+            signInAnonymously: authModule.signInAnonymously,
             sendEmailVerification: authModule.sendEmailVerification,
             deleteUser: authModule.deleteUser,
             signInWithEmailAndPassword: authModule.signInWithEmailAndPassword,
@@ -558,7 +559,7 @@
             dbSdk.onAuthStateChanged(dbSdk.auth, user => {
               try { if (user) localStorage.setItem('notez-auth-hint', '1'); else localStorage.removeItem('notez-auth-hint'); } catch {}
               if (!user) window.nzAuthNoUser = true;
-              if (user && !userChoseDemo) enterCloudWorkspace(user);
+              if (user && !user.isAnonymous && !userChoseDemo) enterCloudWorkspace(user);
               else if (!user && currentSession?.mode === 'cloud') leaveWorkspace(false);
             });
           }
@@ -567,6 +568,15 @@
       }
       return firebasePromise;
     }
+    window.notezEnsureAiAuth = async function() {
+      const sdk = await ensureFirebase();
+      let user = sdk.auth.currentUser;
+      if (!user && currentSession?.mode === 'demo') {
+        user = (await sdk.signInAnonymously(sdk.auth)).user;
+      }
+      if (!user) throw Object.assign(new Error('Sign in or enter demo mode to use Notez AI.'), { code: 'backend-auth' });
+      return user;
+    };
 
     function openLocalDb() {
       return new Promise((resolve, reject) => {
@@ -817,7 +827,7 @@
     function enterDemoWorkspace() {
       userChoseDemo = true;
       selectionMode = false; selectedNoteIds.clear();
-      currentSession = { mode: 'demo', name: 'Demo space', email: '' };
+      currentSession = { mode: 'demo', name: 'Demo workspace', email: '' };
       const saved = localNotesRead();
       notes = saved || seedDemoNotes();
       if (!saved) localNotesWrite();
@@ -929,7 +939,7 @@
     }
     function updateAccountUi() {
       const isCloud = currentSession?.mode === 'cloud';
-      const name = currentSession?.name || 'Demo space';
+      const name = currentSession?.name || 'Demo workspace';
       const avatar = (currentSession?.email || name || 'D').trim().charAt(0).toUpperCase();
       $('#side-profile-name').textContent = name;
       $('#side-profile-type').textContent = isCloud ? 'Firebase workspace' : 'Local workspace';
@@ -987,7 +997,8 @@
         try { await window.notezAiIndexNote(noteId); }
         catch (error) {
           console.warn('Note saved, but its semantic index update failed:', noteId, error);
-          toast('Note saved to Firebase, but its semantic index could not be updated. Use NotezAi settings to rebuild it.', 'error', 6500);
+          const detail = String(error?.message || 'Unknown indexing error').replace(/\s+/g, ' ').slice(0, 220);
+          toast(`Note saved, but semantic indexing failed: ${detail} Open AI settings to refresh the index.`, 'error', 9000);
         }
       }, 800));
     }

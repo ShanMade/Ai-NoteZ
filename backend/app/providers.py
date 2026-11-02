@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Any
@@ -15,6 +16,7 @@ MODEL_DEFAULTS = {
 }
 _cooldowns: dict[str, float] = {}
 _cooldown_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 def provider_cooling_down(provider: str) -> bool:
@@ -154,12 +156,16 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
         }
         for text in texts
     ]
-    async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
-        response = await client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{settings.embedding_model}:batchEmbedContents",
-            params={"key": key},
-            json={"requests": requests},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
+            response = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{settings.embedding_model}:batchEmbedContents",
+                params={"key": key},
+                json={"requests": requests},
+            )
+    except httpx.RequestError as exc:
+        logger.warning("Gemini embedding request failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Could not reach the Gemini embedding service. Try again shortly.") from exc
     if not response.is_success:
         raise _provider_error(response)
     data = response.json()

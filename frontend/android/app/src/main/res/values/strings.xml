@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Notez</string>
+    <string name="title_activity_main">Notez</string>
+    <string name="package_name">com.shanmade.notez</string>
+    <string name="custom_url_scheme">com.shanmade.notez</string>
+</resources>

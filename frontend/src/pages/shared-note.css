@@ -1,0 +1,10 @@
+.shared-note-page { min-height: 100dvh; background: #fbf8f2; color: #302d29; }
+.shared-note-header { height: 62px; display: flex; align-items: center; gap: 7px; padding-inline: clamp(18px, 5vw, 64px); border-bottom: 1px solid #e9e2d7; font-size: 15px; font-weight: 700; }
+.shared-note-header > span:first-child { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: #b56d4c; color: #fff; }
+.shared-note-period { margin-inline-start: -7px; color: #b56d4c; }
+.shared-note-header small { margin-inline-start: auto; color: #928b7f; font-size: 11px; font-weight: 400; }
+.shared-note-content { width: min(100% - 36px, 720px); margin: clamp(38px, 9vh, 90px) auto; }
+.shared-note-eyebrow { color: #928b7f; font: 10px "DM Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+.shared-note-content h1 { margin: 15px 0 25px; font: clamp(32px, 6vw, 48px)/1.12 "DM Serif Display", Georgia, serif; }
+.shared-note-body { color: #4b463f; font: 19px/1.85 "Newsreader", Georgia, serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.shared-note-state { min-height: 100dvh; display: grid; place-items: center; padding: 24px; color: #656057; background: #fbf8f2; font-size: 14px; text-align: center; }

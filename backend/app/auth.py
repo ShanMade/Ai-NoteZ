@@ -15,6 +15,8 @@ def current_user(authorization: Annotated[str | None, Header()] = None) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in to use Notez AI.")
     try:
         claims = verify_id_token(token)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     uid = claims.get("uid")

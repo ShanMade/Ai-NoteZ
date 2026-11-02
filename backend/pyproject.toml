@@ -12,4 +12,4 @@ dynamic = ["dependencies"]
 dependencies = { file = ["requirements.txt"] }
 
 [tool.fastapi]
-entrypoint = "app.main:app"
+entrypoint = "app.v2_main:app"

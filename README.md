@@ -57,9 +57,21 @@ The browser app remains client-heavy. An optional Python FastAPI backend provide
 
 https://ai-notez.web.app/
 
+## Current and next web deployment
+
+The root `firebase.json` still serves the existing static app from the repository root. The newer
+React/Vite workspace lives in `frontend/` and is a separate release target; deploying it to the
+existing default Hosting site would replace that static app. To stage the React app safely, deploy it
+to a new Firebase Hosting site using [`frontend/firebase.json`](frontend/firebase.json) and the
+production checklist in [`frontend/README.md`](frontend/README.md). The React app requires the v2
+FastAPI API, PostgreSQL, Redis, Firebase Authentication/Admin configuration, and separately running
+Celery processes; a successful browser build alone does not provide those services.
+
 ## Local development
 
-There is no package manager or build step in the current workspace. The app is served as a static site.
+The existing root static app has no package manager or build step. The new React workspace has its
+own Vite build and dependencies under `frontend/`; follow [`frontend/README.md`](frontend/README.md)
+to run and deploy it.
 
 1. Open a terminal in this project directory.
 2. Start a local server:
@@ -115,9 +127,7 @@ firebase deploy
 
 ## AI provider configuration and security
 
-The hosted app uses the FastAPI backend at `https://ai-notez.fastapicloud.dev` for AI requests first; users do not need to enter provider API keys in the app. Configure `AI_GEMINI_API_KEY` or `AI_GROQ_API_KEY` as a secret in FastAPI Cloud's backend environment variables, and set `NOTEZ_CORS_ORIGINS` to the exact hosted frontend origin (for example, `https://ai-notez.web.app`). The browser sends authenticated requests to the backend, which uses its server-side provider credentials. Do not put provider secrets in the frontend or repository.
-
-Direct Gemini/Groq BYOK remains available in local setups where the backend URL is blank.
+The hosted app uses the FastAPI backend at `https://ai-notez.fastapicloud.dev` by default. Users may optionally choose BYOK in AI settings; BYOK keys stay in the browser and are sent directly to the selected provider, never through the Notez backend. Configure `AI_GEMINI_API_KEY` or `AI_GROQ_API_KEY` as a secret in FastAPI Cloud for managed generation. Semantic note indexing/search also needs `AI_EMBEDDING_API_KEY` or a Gemini key available as `AI_GEMINI_API_KEY`. Set `NOTEZ_CORS_ORIGINS` to the comma-separated exact frontend origins, including `https://shanmade.github.io` for the GitHub Pages site (do not include `/Ai-Notez/`). Keep any existing Firebase Hosting origins in the list. In Firebase Console, add `shanmade.github.io` under Authentication > Settings > Authorized domains. Configure `FIREBASE_SERVICE_ACCOUNT_JSON` as a secret, and `FIREBASE_PROJECT_ID` plus `FIREBASE_DATABASE_URL` so the backend can verify sign-ins and read the user's notes. Do not put app-managed provider secrets in the frontend or repository.
 
 ## Optional local AI backend and semantic search
 
@@ -128,14 +138,15 @@ The backend is a separate FastAPI service in `backend/`. It keeps the current ap
 - The backend verifies Firebase ID tokens and reads only the authenticated user's note paths.
 - SQLite stores local index metadata and chunk embeddings; USearch maintains a persistent HNSW vector index per authenticated user. These are derived local files under `backend/data/`, not a replacement for Firebase or a shared database.
 - Note saves enqueue index updates; NotezAi settings offers a rebuild for existing notes. Search is scoped to the verified Firebase UID and rechecks current Realtime Database content before returning a result.
-- The hosted `notez-ai-api-base-url` meta value points to `https://ai-notez.fastapicloud.dev`. With the backend URL set, authenticated AI requests use backend-managed credentials; the app does not send or prompt for a user's provider key. In local setups where that meta value is blank, direct BYOK requests continue.
+- The hosted `notez-ai-api-base-url` meta value points to `https://ai-notez.fastapicloud.dev`. Managed AI uses backend-managed provider credentials. The local demo can use managed AI through Firebase Anonymous Authentication without an account; demo notes remain local. Enable **Authentication > Sign-in method > Anonymous** in Firebase Console before deploying the frontend change. AI settings also offers optional BYOK: keys are stored in the current browser and sent directly to the selected provider, not to the Notez backend.
+- Signed-in users are limited to 30 API requests per 60 seconds by default (`AI_RATE_LIMIT_REQUESTS` and `AI_RATE_LIMIT_WINDOW_SECONDS`). Anonymous users have a tighter default of 5 requests per 60 seconds, a 12,000-character prompt cap, and no image requests (`AI_GUEST_RATE_LIMIT_REQUESTS`, `AI_GUEST_RATE_LIMIT_WINDOW_SECONDS`, and `AI_GUEST_MAX_PROMPT_CHARS`). These in-memory limits are per backend process, are not distributed across replicas, reset when a process restarts, and can be evaded by creating new anonymous identities. Set provider-side quotas and billing alerts before enabling guest AI publicly; these rate limits are not a hard spending cap. BYOK traffic is governed by the chosen provider's own quotas.
 
 ### Local development on Windows
 
 Use Python 3.12 on Windows. USearch publishes a prebuilt Windows wheel, so installing this backend does not require compiling `hnswlib` or installing Visual Studio C++ Build Tools. Firebase Admin needs credentials for token verification and Realtime Database reads; store any service-account JSON outside this repository and never commit it.
 
 ```powershell
-Set-Location C:\Users\Shan\Desktop\Notez\backend
+Set-Location (Join-Path $HOME 'Desktop\Notez\backend')
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 $venv = Join-Path $HOME '.venvs\notez-backend'
 if (-not (Test-Path "$venv\Scripts\python.exe")) { py -3.12 -m venv $venv }
@@ -145,17 +156,17 @@ $python = "$venv\Scripts\python.exe"
 $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\path\outside\the\repo\firebase-admin.json'
 ```
 
-Using the environment's `python.exe` directly avoids PowerShell activation-policy issues. Configure `FIREBASE_DATABASE_URL`, `FIREBASE_PROJECT_ID`, exact frontend origins in `NOTEZ_CORS_ORIGINS`, and any app-managed AI or embedding keys in `.env`. Keep `.env` private. The default `NOTEZ_DATA_DIR=./data` stores the SQLite database and HNSW index files locally; add enough free disk space and back up this directory if you need to retain the derived index.
+Using the environment's `python.exe` directly avoids PowerShell activation-policy issues. Configure `FIREBASE_DATABASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`, exact frontend origins in `NOTEZ_CORS_ORIGINS`, and any app-managed AI or embedding keys in `.env`. Keep `.env` private. The default `NOTEZ_DATA_DIR=./data` stores the SQLite database and HNSW index files locally; add enough free disk space and back up this directory if you need to retain the derived index.
 
 ```powershell
-Set-Location C:\Users\Shan\Desktop\Notez\backend
+Set-Location (Join-Path $HOME 'Desktop\Notez\backend')
 & "$HOME\.venvs\notez-backend\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8787 --reload
 ```
 
 In a second PowerShell window, serve the frontend from the repository root:
 
 ```powershell
-Set-Location C:\Users\Shan\Desktop\Notez
+Set-Location (Join-Path $HOME 'Desktop\Notez')
 py -m http.server 8000
 ```
 

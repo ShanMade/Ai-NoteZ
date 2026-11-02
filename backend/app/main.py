@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
+import sqlite3
 import time
 from collections import defaultdict, deque
 from typing import Annotated
@@ -18,6 +20,7 @@ from .vector_store import HnswIndexManager, note_text
 from .providers import MODEL_DEFAULTS, configured_providers, cool_down, embed_query, embed_texts, generate, provider_cooling_down, provider_key
 
 index_manager = HnswIndexManager()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Notez AI API", version="1.0.0")
 app.add_middleware(
@@ -26,6 +29,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Retry-After"],
     max_age=600,
 )
 NOTE_ID = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
@@ -45,15 +49,27 @@ class RequestLimiter:
             while queue and queue[0] <= now - self.window_seconds:
                 queue.popleft()
             if len(queue) >= self.limit:
-                raise HTTPException(status_code=429, detail="Notez AI request limit reached. Try again shortly.")
+                retry_after = max(1, int(queue[0] + self.window_seconds - now + 0.999))
+                raise HTTPException(
+                    status_code=429,
+                    detail="Notez AI request limit reached. Try again shortly.",
+                    headers={"Retry-After": str(retry_after)},
+                )
             queue.append(now)
 
 
-limiter = RequestLimiter()
+limiter = RequestLimiter(settings.rate_limit_requests, settings.rate_limit_window_seconds)
+guest_limiter = RequestLimiter(settings.guest_rate_limit_requests, settings.guest_rate_limit_window_seconds)
+
+
+def is_anonymous_user(user: dict) -> bool:
+    firebase_claims = user.get("firebase")
+    return isinstance(firebase_claims, dict) and firebase_claims.get("sign_in_provider") == "anonymous"
 
 
 async def rate_limit(user: AuthenticatedUser) -> dict:
-    await limiter.check(str(user["uid"]))
+    active_limiter = guest_limiter if is_anonymous_user(user) else limiter
+    await active_limiter.check(str(user["uid"]))
     return user
 
 
@@ -139,6 +155,11 @@ async def public_config(user: AuthenticatedUser):
 
 @app.post("/v1/ai/generate", dependencies=[Depends(rate_limit)])
 async def ai_generate(body: GenerateRequest, user: AuthenticatedUser):
+    if is_anonymous_user(user):
+        if len(body.prompt) > settings.guest_max_prompt_chars:
+            raise HTTPException(status_code=413, detail="Guest AI prompts are limited to a shorter length.")
+        if body.images:
+            raise HTTPException(status_code=403, detail="Image requests are not available in guest mode.")
     byok = body.api_key.get_secret_value().strip() if body.api_key else ""
     if byok:
         return await generate(
@@ -185,7 +206,11 @@ async def index_note(note_id: str, user: RateLimitedUser):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not note:
         raise HTTPException(status_code=404, detail="The note does not exist in this user's Realtime Database.")
-    changed = await index_manager.upsert(uid, note_id, note, embed_texts)
+    try:
+        changed = await index_manager.upsert(uid, note_id, note, embed_texts)
+    except (OSError, sqlite3.Error) as exc:
+        logger.exception("Semantic index storage failed during note update")
+        raise HTTPException(status_code=503, detail="Semantic index storage is unavailable. Try refreshing the index later.") from exc
     return {"indexed": changed, "noteId": note_id}
 
 
@@ -204,7 +229,11 @@ async def rebuild_index(user: RateLimitedUser):
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     normalized = {str(note_id): note for note_id, note in notes.items() if isinstance(note, dict) and NOTE_ID.fullmatch(str(note_id))}
-    count = await index_manager.rebuild(uid, normalized, embed_texts)
+    try:
+        count = await index_manager.rebuild(uid, normalized, embed_texts)
+    except (OSError, sqlite3.Error) as exc:
+        logger.exception("Semantic index storage failed during rebuild")
+        raise HTTPException(status_code=503, detail="Semantic index storage is unavailable. Try refreshing the index later.") from exc
     return {"indexedChunks": count, "indexedNotes": len(normalized)}
 
 

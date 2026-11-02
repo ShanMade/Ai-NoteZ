@@ -1847,7 +1847,7 @@
     .nzai-section-head span { opacity: .6; font-size: 11.5px; }
     .fp-modal{width:min(460px,100%)}.fp-list{margin-top:8px;max-height:280px;overflow:auto;border:1px solid rgba(128,148,170,.28);border-radius:10px;padding:4px}.fp-row{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:8px 12px;border-radius:8px;cursor:pointer;font:500 13px system-ui,sans-serif}.fp-row:hover{background:rgba(128,148,170,.12)}.fp-row.on{background:color-mix(in srgb,var(--nz-accent) 18%,transparent);font-weight:700}.fp-row small{opacity:.6;font-size:11px}.fp-create{color:var(--nz-accent)}.fp-empty{padding:14px;font-size:12.5px;opacity:.7}.fp-selected{margin-top:8px;font-size:12px;opacity:.75}
     /* ============ Docked panel: assistant + voice notes (no blocking overlay) ============ */
-    :root { --dock-w: 440px; }
+    :root { --dock-w: clamp(340px, 34vw, 460px); }
     #nz-ai { position: fixed; top: 0; right: 0; bottom: 0; width: min(var(--dock-w), 100vw); z-index: 1600; display: flex; flex-direction: column; background: var(--panel, #ffffff); color: var(--ink, #1a2b3a); border-left: 1px solid var(--line, #dbe5ea); box-shadow: none; font-size: 13.5px; line-height: 1.5; }
     html[data-theme="dark"] #nz-ai { background: #0f1a28; color: #e3edf6; border-left-color: rgba(173,194,220,.14); }
     #nz-ai[hidden] { display: none !important; }
@@ -2275,6 +2275,8 @@ html[data-theme="dark"] #nz-ai { --v3-card: #16263a; --v3-edge: rgba(173,194,220
 #nz-ai .ai-ibtn:focus-visible { outline: 2px solid var(--nz-accent); outline-offset: 1px; }
 #nz-ai .ai-send { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; }
 #nz-ai .ai-foot { justify-content: center; gap: 10px; font-size: 11px; }
+#nz-ai .ai-composer textarea { scrollbar-width: none; }
+#nz-ai .ai-composer textarea::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 /* history */
 #nz-ai .hist-list { gap: 0; }
@@ -2359,3 +2361,179 @@ html[data-theme="dark"] #nz-ai { --v3-card: #16263a; --v3-edge: rgba(173,194,220
    never treats it as a login and never fills your email or password into it or the search box. */
 #nz-ai .nzai-secret { -webkit-text-security: disc; text-security: disc; font-family: inherit; letter-spacing: .08em; }
 #nz-ai .nzai-secret::placeholder { -webkit-text-security: none; letter-spacing: normal; }
+
+/* AI settings: clear provider mode, calm information hierarchy, keyboard-friendly controls. */
+#nz-ai .ai-settings-intro { padding: 8px 2px 4px; }
+#nz-ai .ai-settings-kicker { color: var(--nz-accent); font-size: 10px; font-weight: 750; letter-spacing: .12em; }
+#nz-ai .ai-settings-intro h2 { margin: 4px 0; color: var(--chat-ink); font-size: 24px; letter-spacing: -.035em; }
+#nz-ai .ai-settings-intro p { margin: 0; color: var(--chat-muted); font-size: 12.5px; line-height: 1.5; }
+#nz-ai .ai-mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#nz-ai .ai-mode-picker button { min-height: 66px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 12px; border: 1px solid var(--v3-edge); border-radius: 13px; background: var(--v3-card); color: var(--chat-ink); text-align: left; cursor: pointer; transition: border-color .16s, background .16s, transform .16s; }
+#nz-ai .ai-mode-picker button:hover { transform: translateY(-1px); }
+#nz-ai .ai-mode-picker button[aria-pressed="true"] { border-color: var(--nz-accent); background: var(--v3-tint); box-shadow: 0 0 0 1px color-mix(in srgb, var(--nz-accent) 20%, transparent); }
+#nz-ai .ai-mode-picker button b, #nz-ai .ai-mode-summary b { font-size: 12.5px; }
+#nz-ai .ai-mode-picker button small, #nz-ai .ai-mode-summary span { color: var(--chat-muted); font-size: 11px; line-height: 1.4; }
+#nz-ai .ai-mode-picker button:focus-visible { outline: 2px solid var(--nz-accent); outline-offset: 2px; }
+#nz-ai .ai-mode-summary { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--v3-edge); border-radius: 12px; background: var(--v3-tint); color: var(--chat-ink); }
+#nz-ai .ai-provider-card { display: flex; flex-direction: column; gap: 9px; padding: 13px; border: 1px solid var(--v3-edge); border-radius: 14px; background: var(--v3-card); }
+#nz-ai .ai-provider-card .nzai-section-head { margin: 0; }
+#nz-ai .ai-provider-card .nzai-chips { margin: 0; }
+#nz-ai .ai-provider-card .nzai-label { margin: 2px 0 -4px; }
+#nz-ai .ai-provider-card .nzai-check { margin-top: 0; }
+#nz-ai .ai-provider-status { width: 8px; height: 8px; position: absolute; top: 17px; left: 13px; margin: 0; border-radius: 50%; background: var(--nz-accent); box-shadow: 0 0 0 4px var(--v3-tint); }
+#nz-ai .managed-provider-card { position: relative; padding-left: 27px; }
+#nz-ai .ai-provider-card button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 380px) {
+  #nz-ai .ai-mode-picker { grid-template-columns: 1fr; }
+  #nz-ai .ai-mode-picker button { min-height: 56px; }
+}
+
+/* Phone layout: a full-screen study workspace with a persistent, collapsible feature rail. */
+#nz-ai .ai-mobile-sidebar, #nz-ai .ai-mobile-sidebar-toggle { display: none; }
+@media (max-width: 760px) {
+  #nz-ai {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-rows: calc(58px + env(safe-area-inset-top, 0px)) minmax(0, 1fr);
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  #nz-ai.mobile-sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+  #nz-ai .dock-grab { display: none; }
+  #nz-ai .ai-mobile-sidebar {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 5px calc(10px + env(safe-area-inset-bottom, 0px)) calc(5px + env(safe-area-inset-left, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-right: 1px solid var(--v3-edge);
+    background: color-mix(in srgb, var(--v3-card) 94%, var(--nz-accent));
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #nz-ai.mobile-sidebar-collapsed .ai-mobile-sidebar { visibility: hidden; opacity: 0; pointer-events: none; transform: translateX(-8px); }
+  #nz-ai .ai-mobile-brand {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 8px;
+    border-radius: 12px;
+    background: var(--nz-accent);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -.06em;
+  }
+  #nz-ai .ai-mobile-item {
+    width: 100%;
+    min-height: 53px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 2px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--chat-muted);
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #nz-ai .ai-mobile-item svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #nz-ai .ai-mobile-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 650; line-height: 1.15; }
+  #nz-ai .ai-mobile-item:hover { background: var(--v3-tint); color: var(--chat-ink); }
+  #nz-ai .ai-mobile-item.on { border-color: color-mix(in srgb, var(--nz-accent) 22%, transparent); background: var(--v3-tint); color: var(--nz-accent); }
+  #nz-ai .ai-mobile-item:focus-visible { outline: 2px solid var(--nz-accent); outline-offset: 1px; }
+  #nz-ai .ai-mobile-item:disabled { opacity: .4; cursor: not-allowed; }
+  #nz-ai .ai-mobile-divider { width: 32px; flex: 0 0 1px; margin: 4px 0; background: var(--v3-edge); }
+  #nz-ai .ai-mobile-label { align-self: center; margin: 2px 0; color: var(--chat-muted); font-size: 8px; font-weight: 750; letter-spacing: .08em; }
+  #nz-ai .ai-mobile-spacer { flex: 1 0 8px; }
+  #nz-ai .dock-chrome {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    gap: 6px;
+    padding: env(safe-area-inset-top, 0px) 8px 0;
+    border-bottom: 1px solid var(--chat-line);
+  }
+  #nz-ai .ai-mobile-sidebar-toggle { display: inline-flex; width: 36px; height: 36px; }
+  #nz-ai .ai-mobile-sidebar-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #nz-ai .fl-lead { width: 36px; height: 36px; }
+  #nz-ai .fl-lead:not(.is-back) .ic-x { display: block; }
+  #nz-ai .fl-lead:not(.is-back) .ic-down { display: none; }
+  #nz-ai .dock-ctx { justify-content: flex-start; }
+  #nz-ai .ai-ctx-chip { min-height: 38px; }
+  #nz-ai .fl-bar { display: none; }
+  #nz-ai .dock-pane { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; }
+  #nz-ai .nzai-body, #nz-ai .rec-body { min-width: 0; padding: 10px 11px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  #nz-ai .ai-thread { gap: 16px; }
+  #nz-ai .ai-welcome { padding: 10px 1px 4px; }
+  #nz-ai .ai-welcome h3 { font-size: clamp(22px, 7vw, 28px); }
+  #nz-ai .ai-composer { gap: 0; padding-left: 10px; border-radius: 16px; }
+  #nz-ai .ai-ibtn { width: 34px; height: 38px; }
+  #nz-ai .ai-send { width: 38px; height: 38px; flex-basis: 38px; }
+  #nz-ai .ai-foot { flex-wrap: wrap; }
+  #nz-ai .nzai-notice { overflow-wrap: anywhere; }
+  html.nzai-open body { overflow: hidden; }
+}
+@media (max-width: 360px) {
+  #nz-ai { grid-template-columns: 66px minmax(0, 1fr); }
+  #nz-ai.mobile-sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+  #nz-ai .dock-chrome { padding-right: 6px; padding-left: 6px; }
+  #nz-ai .ai-ctx-chip { font-size: 11px; }
+}
+
+/* Desktop: give the assistant room to breathe and make the welcome actions feel like tools. */
+@media (min-width: 761px) {
+  #nz-ai {
+    border-left-color: var(--v3-edge);
+    box-shadow: -14px 0 42px rgba(22, 40, 34, .08);
+  }
+  html[data-theme="dark"] #nz-ai { box-shadow: -14px 0 42px rgba(0, 0, 0, .28); }
+  #nz-ai .dock-chrome { min-height: 66px; gap: 12px; padding: 12px 18px; }
+  #nz-ai .dock-ctx { justify-content: flex-start; }
+  #nz-ai .dock-ctx-title { font-size: 14px; }
+  #nz-ai .ai-ctx-chip { min-height: 38px; padding-left: 13px; }
+  #nz-ai .fl-btn { width: 38px; height: 38px; }
+  #nz-ai .nzai-body { padding: 14px 24px 18px; gap: 14px; }
+  #nz-ai .ai-thread { gap: 24px; padding: 16px 8px 12px; }
+  #nz-ai .ai-day { align-self: center; padding: 5px 11px; border: 1px solid var(--v3-edge); border-radius: 20px; background: var(--v3-card); letter-spacing: .04em; }
+  #nz-ai .ai-bubble-user { max-width: min(84%, 430px); padding: 11px 15px; border: 1px solid color-mix(in srgb, var(--nz-accent) 12%, var(--v3-edge)); border-radius: 18px 18px 5px 18px; }
+  #nz-ai .ai-msg.ai { padding: 2px 5px; }
+  #nz-ai .ai-md { font-size: 14px; line-height: 1.72; }
+  #nz-ai .ai-md h1, #nz-ai .ai-md h2, #nz-ai .ai-md h3 { font-size: 15px; margin-top: 15px; }
+  #nz-ai .ai-composer-wrap { margin: 3px 0 0; }
+  #nz-ai .ai-composer { gap: 5px; padding: 7px 7px 7px 16px; border-radius: 19px; box-shadow: 0 6px 22px rgba(20, 35, 29, .07); }
+  #nz-ai .ai-composer textarea { min-height: 34px; font-size: 14px; }
+  #nz-ai .ai-ibtn { width: 36px; height: 36px; }
+  #nz-ai .ai-send { width: 38px; height: 38px; flex-basis: 38px; border-radius: 13px; }
+  #nz-ai .ai-foot { justify-content: space-between; padding: 0 7px; }
+  #nz-ai .ai-welcome { width: 100%; max-width: 660px; margin: auto; padding: 34px 12px 26px; }
+  #nz-ai .ai-welcome h3 { max-width: 460px; margin-bottom: 10px; font-size: clamp(28px, 3vw, 36px); letter-spacing: -.035em; }
+  #nz-ai .ai-welcome p { max-width: 520px; margin-bottom: 24px; font-size: 13.5px; }
+  #nz-ai .ai-suggest { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 0; }
+  #nz-ai .ai-card { position: relative; min-height: 94px; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 7px; padding: 14px 38px 13px 14px; border: 1px solid var(--v3-edge); border-radius: 14px; background: var(--v3-card); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  #nz-ai .ai-card:hover:not(:disabled) { transform: translateY(-2px); border-color: color-mix(in srgb, var(--nz-accent) 45%, var(--v3-edge)); background: var(--v3-card); box-shadow: 0 7px 20px rgba(20, 35, 29, .07); }
+  #nz-ai .ai-card::after { position: absolute; top: 15px; right: 15px; display: grid; width: 24px; height: 24px; place-items: center; margin: 0; border-radius: 50%; background: var(--v3-tint); color: var(--nz-accent); }
+  #nz-ai .ai-card-ic { width: 31px; height: 31px; border-radius: 10px; }
+  #nz-ai .ai-card-tx { gap: 3px; }
+  #nz-ai .ai-card small { max-width: 210px; text-align: left; line-height: 1.4; }
+  #nz-ai .ai-hint { margin-top: 20px; }
+}

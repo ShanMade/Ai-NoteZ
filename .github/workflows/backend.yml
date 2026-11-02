@@ -1,0 +1,59 @@
+name: Backend
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: notez
+          POSTGRES_PASSWORD: notez
+          POSTGRES_DB: notez
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notez -d notez"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://notez:notez@localhost:5432/notez
+      REDIS_URL: redis://localhost:6379/0
+      FIREBASE_PROJECT_ID: notez-ci
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account","project_id":"notez-ci"}'
+      CORS_ORIGINS: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Apply migrations to a clean database
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q

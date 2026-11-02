@@ -5,6 +5,7 @@
       "firebase.json",
       "database.rules.json",
       "backend/**",
+      "$HOME/**",
       "**/.*",
       "**/node_modules/**"
     ],
