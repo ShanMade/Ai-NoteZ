@@ -78,6 +78,21 @@ dedicated Hosting site named `notez-frontend`; it will not overwrite the root ap
    semantic retrieval, and reliable recording additionally require Gemini, Qdrant, and shared
    persistent audio storage (for example R2). Run Alembic migrations as a release step, and run the
    API, Celery worker, and Celery Beat as separate processes. See [the backend deployment guide](../backend/README.md).
+4. To deploy automatically from GitHub Actions, add the following in the repository's
+   **Settings → Secrets and variables → Actions**:
+
+   - Secret `FIREBASE_SERVICE_ACCOUNT`: JSON for a Google service account authorized to deploy
+     Firebase Hosting to this project.
+   - Variables `FIREBASE_PROJECT_ID` and `FIREBASE_HOSTING_SITE_ID`: the Firebase project ID and
+     the ID of the dedicated Hosting site created above.
+   - Variables `VITE_API_URL`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`,
+     `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`: the same public web settings used in
+     `.env.production`.
+
+   Push changes to `main` or `Ai-NoteZ`, or manually run the **Frontend** workflow from either
+   branch. The workflow builds and deploys only the `notez-frontend` Hosting target. It does not
+   deploy the legacy root app or the backend. Gemini and other private provider keys belong in the
+   backend host's secret manager, never in GitHub `VITE_*` variables.
 
 `npm run build:release` refuses to build unless all Firebase web settings and an HTTPS API URL are
 present and non-placeholder. Never place service-account JSON, AI provider keys, database passwords,

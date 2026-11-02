@@ -2,6 +2,9 @@ name: Frontend
 
 on:
   push:
+    branches:
+      - main
+      - Ai-NoteZ
     paths:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
@@ -9,6 +12,7 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -35,3 +39,64 @@ jobs:
           VITE_FIREBASE_APP_ID: 1:123456789:web:abcdef123456
       - name: Type-check and build
         run: npm run build
+
+  deploy:
+    needs: build
+    if: github.ref_name == 'main' || github.ref_name == 'Ai-NoteZ'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      FIREBASE_HOSTING_SITE_ID: ${{ vars.FIREBASE_HOSTING_SITE_ID }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify Firebase deployment settings
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_PROJECT_ID" ] || [ -z "$FIREBASE_HOSTING_SITE_ID" ]; then
+            echo "::error::Set the FIREBASE_PROJECT_ID and FIREBASE_HOSTING_SITE_ID repository variables."
+            exit 1
+          fi
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Set the FIREBASE_SERVICE_ACCOUNT repository secret."
+            exit 1
+          fi
+          npm ci
+          npm run check:release
+      - name: Configure the dedicated Hosting target
+        run: |
+          node --input-type=module -e '
+            import { writeFileSync } from "node:fs";
+            const projectId = process.env.FIREBASE_PROJECT_ID;
+            const siteId = process.env.FIREBASE_HOSTING_SITE_ID;
+            const config = {
+              projects: { default: projectId },
+              targets: {
+                [projectId]: {
+                  hosting: { "notez-frontend": [siteId] }
+                }
+              }
+            };
+            writeFileSync(".firebaserc", `${JSON.stringify(config, null, 2)}\n`);
+          '
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+      - name: Deploy production frontend to Firebase Hosting
+        run: firebase deploy --only hosting:notez-frontend --project "$FIREBASE_PROJECT_ID"
