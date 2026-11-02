@@ -56,4 +56,4 @@ jobs:
         run: alembic upgrade head
       - name: Run tests
         working-directory: backend
-        run: pytest -q
+        run: python -m pytest -q
