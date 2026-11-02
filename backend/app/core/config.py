@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -45,11 +46,19 @@ class Settings(BaseSettings):
     def async_database_url(cls, value: str) -> str:
         value = value.strip()
         if value.startswith("postgres://"):
-            return "postgresql+asyncpg://" + value[len("postgres://") :]
-        if value.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + value[len("postgresql://") :]
-        if value.startswith("sqlite://"):
-            return "sqlite+aiosqlite://" + value[len("sqlite://") :]
+            value = "postgresql+asyncpg://" + value[len("postgres://") :]
+        elif value.startswith("postgresql://"):
+            value = "postgresql+asyncpg://" + value[len("postgresql://") :]
+        elif value.startswith("sqlite://"):
+            value = "sqlite+aiosqlite://" + value[len("sqlite://") :]
+        if value.startswith("postgresql+asyncpg://"):
+            url = make_url(value)
+            query = dict(url.query)
+            query.pop("channel_binding", None)
+            sslmode = query.pop("sslmode", None)
+            if sslmode is not None:
+                query.setdefault("ssl", sslmode)
+            value = url.set(query=query).render_as_string(hide_password=False)
         return value
 
     @field_validator("cors_origins", mode="before")

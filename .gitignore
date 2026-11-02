@@ -24,3 +24,4 @@ backend/data/
 *.sqlite3-wal
 *.usearch
 backend/service-account*.json
+.neon
