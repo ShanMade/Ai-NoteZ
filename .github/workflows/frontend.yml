@@ -1,0 +1,37 @@
+name: Frontend
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate release configuration
+        run: npm run check:release
+        env:
+          VITE_API_URL: https://api.ci.example.com
+          VITE_FIREBASE_API_KEY: AIzaSyCIValidationKeyOnly
+          VITE_FIREBASE_AUTH_DOMAIN: notez-ci.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: notez-ci
+          VITE_FIREBASE_APP_ID: 1:123456789:web:abcdef123456
+      - name: Type-check and build
+        run: npm run build

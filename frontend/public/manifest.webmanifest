@@ -1,0 +1,9 @@
+{
+  "name": "Notez Design Directions",
+  "short_name": "Notez",
+  "description": "Compare three design directions for Notez AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#f7f8fa"
+}

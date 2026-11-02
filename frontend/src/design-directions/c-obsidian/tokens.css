@@ -1,0 +1,85 @@
+[data-direction="c"] {
+  color-scheme: light;
+  --surface: #e5e8eb;
+  --surface-raised: #eff1f3;
+  --surface-soft: #d9dee2;
+  --surface-hover: #cfd5da;
+  --text-primary: #20272e;
+  --text-secondary: #4a5964;
+  --text-muted: #77858e;
+  --border: #c8d0d5;
+  --accent: #b34bf2;
+  --accent-hover: #9634d1;
+  --accent-soft: #f0defa;
+  --success: #32876b;
+  --warning: #a97532;
+  --error: #c54d59;
+  --font-display: "Space Grotesk";
+  --font-body: "Manrope";
+  --font-mono: "DM Mono";
+  --font-urdu: "Noto Nastaliq Urdu";
+  --space-1: 0.25rem;
+  --space-2: 0.625rem;
+  --space-3: 0.875rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-direction="c"]:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #000000;
+    --surface-raised: #111519;
+    --surface-soft: #171d22;
+    --surface-hover: #20282f;
+    --text-primary: #e9f0f3;
+    --text-secondary: #b6c4ca;
+    --text-muted: #78878f;
+    --border: #263139;
+    --accent: #d58cff;
+    --accent-hover: #e2a9ff;
+    --accent-soft: #302039;
+    --success: #65c5a0;
+    --warning: #e6b778;
+    --error: #ef858e;
+  }
+}
+
+[data-direction="c"][data-theme="light"] {
+  color-scheme: light;
+  --surface: #e5e8eb;
+  --surface-raised: #eff1f3;
+  --surface-soft: #d9dee2;
+  --surface-hover: #cfd5da;
+  --text-primary: #20272e;
+  --text-secondary: #4a5964;
+  --text-muted: #77858e;
+  --border: #c8d0d5;
+  --accent: #b34bf2;
+  --accent-hover: #9634d1;
+  --accent-soft: #f0defa;
+  --success: #32876b;
+  --warning: #a97532;
+  --error: #c54d59;
+}
+
+[data-direction="c"][data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #000000;
+  --surface-raised: #111519;
+  --surface-soft: #171d22;
+  --surface-hover: #20282f;
+  --text-primary: #e9f0f3;
+  --text-secondary: #b6c4ca;
+  --text-muted: #78878f;
+  --border: #263139;
+  --accent: #d58cff;
+  --accent-hover: #e2a9ff;
+  --accent-soft: #302039;
+  --success: #65c5a0;
+  --warning: #e6b778;
+  --error: #ef858e;
+}
