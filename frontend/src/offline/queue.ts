@@ -119,11 +119,23 @@ export async function enqueueOperation(operation: Omit<QueuedOp, "queueId">): Pr
 export async function getQueuedOperations(ownerId: string): Promise<QueuedOp[]> {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
-    const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll() as IDBRequest<QueuedOp[]>;
-    request.onsuccess = () => resolve(
-      request.result.filter((operation) => operation.ownerId === ownerId)
-        .sort((left, right) => (left.queueId ?? 0) - (right.queueId ?? 0)),
-    );
+    const collected: QueuedOp[] = [];
+    const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(collected.sort((left, right) => (left.queueId ?? 0) - (right.queueId ?? 0)));
+        return;
+      }
+      const value = cursor.value as QueuedOp;
+      // Records written by older schemas may have an out-of-line key and no queueId field.
+      // The record key is then the only identifier, so use it to keep these changes syncable.
+      const queueId = typeof value.queueId === "number"
+        ? value.queueId
+        : typeof cursor.primaryKey === "number" ? cursor.primaryKey : undefined;
+      if (value.ownerId === ownerId) collected.push({ ...value, queueId });
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error ?? new Error("Offline operations could not be loaded."));
   });
 }
