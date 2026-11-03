@@ -5,12 +5,12 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.celery_app import celery_app
 from ..core.config import settings
-from ..core.db import AsyncSessionLocal, get_db
+from ..core.db import get_db
 from ..core.errors import NoteNotFound
 from ..models import RecordingPart, RecordingSession, SessionSpeaker, TranscriptSegment
 from ..repositories.recording import (
@@ -56,25 +56,31 @@ def _segment_read(segment: TranscriptSegment, speaker: SessionSpeaker | None) ->
     )
 
 
-async def _dispatch_part(session_id: uuid.UUID, part_index: int) -> None:
+async def _try_dispatch_part(session_id: uuid.UUID, part_index: int) -> bool:
+    """Best-effort Celery dispatch. Returns False instead of raising so the
+    caller can mark the (already persisted) part failed in its own database
+    session, keeping the audio recoverable and the part re-uploadable."""
     try:
         await asyncio.to_thread(
             celery_app.send_task,
             "transcription.transcribe_part",
             args=[str(session_id), part_index],
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("Could not dispatch transcription for recording part %s.", part_index)
-        async with AsyncSessionLocal() as db:
-            async with db.begin():
-                part = await get_part(db, session_id=session_id, part_index=part_index)
-                if part is not None and part.status == "queued":
-                    part.status = "failed"
-                    part.error_code = "dispatch_failed"
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Transcription could not be queued. Retry this recording part.",
-        ) from exc
+        return False
+    return True
+
+
+async def _mark_dispatch_failed(db: AsyncSession, session: RecordingSession, part) -> None:
+    # The caller has already committed, so the session may hold an open
+    # read transaction; mutate and commit directly instead of nesting a
+    # new transaction block.
+    part.status = "failed"
+    part.error_code = "dispatch_failed"
+    if session.finish_requested:
+        await finalize_if_ready(db, session)
+    await db.commit()
 
 
 @router.post("/sessions", response_model=RecordingSessionCreated, status_code=status.HTTP_201_CREATED)
@@ -134,12 +140,19 @@ async def submit_recording_part(
     session = await get_session(db, user_id=user.id, session_id=session_id)
     if session is None:
         raise NoteNotFound()
-    if session.status in {"done", "has_failed_parts"}:
+    if session.status == "done":
         raise HTTPException(status_code=409, detail="This recording session is already finished.")
     if session.finish_requested and part_index >= session.expected_part_count:
         raise HTTPException(status_code=409, detail="This recording part was not included when the session was finished.")
     existing = await get_part(db, session_id=session_id, part_index=part_index)
-    if existing is not None:
+    if session.status == "has_failed_parts" and (existing is None or existing.status != "failed"):
+        # A finished session may only change by replacing one of its failed
+        # parts; anything else would alter an already-decided part count.
+        raise HTTPException(status_code=409, detail="This recording session is already finished.")
+    if existing is not None and existing.status != "failed":
+        # Idempotent re-upload of a part that is already stored: queued parts
+        # are awaiting the worker, processing/done parts must not be
+        # transcribed twice. Failed parts fall through and are replaced below.
         return RecordingPartQueued(part_id=existing.id, status=existing.status)
 
     content_type = audio.content_type or "application/octet-stream"
@@ -167,15 +180,34 @@ async def submit_recording_part(
                 detail="Recording audio could not be stored. Retry the upload.",
             ) from exc
 
-    part = RecordingPart(
-        session_id=session_id,
-        part_index=part_index,
-        storage_key=storage_key,
-        content_type=content_type,
-        status="done" if is_empty else "queued",
-        is_empty=is_empty,
-    )
-    db.add(part)
+    if existing is None:
+        part = RecordingPart(
+            session_id=session_id,
+            part_index=part_index,
+            storage_key=storage_key,
+            content_type=content_type,
+            status="done" if is_empty else "queued",
+            is_empty=is_empty,
+        )
+        db.add(part)
+    else:
+        # Replacing a failed part: keep the same row (and part id), discard
+        # any partial transcript from the failed attempt, and start clean.
+        part = existing
+        part.storage_key = storage_key
+        part.content_type = content_type
+        part.status = "done" if is_empty else "queued"
+        part.is_empty = is_empty
+        part.attempts = 0
+        part.error_code = None
+        await db.execute(
+            delete(TranscriptSegment).where(
+                TranscriptSegment.session_id == session_id,
+                TranscriptSegment.part_index == part_index,
+            )
+        )
+        if session.status == "has_failed_parts":
+            session.status = "processing" if session.finish_requested else "recording"
     await db.flush()
     if is_empty:
         db.add(
@@ -198,7 +230,16 @@ async def submit_recording_part(
             except Exception:
                 logger.exception("Could not dispatch indexing for finished recording note %s.", note_id)
     if not is_empty:
-        await _dispatch_part(session_id, part_index)
+        if not await _try_dispatch_part(session_id, part_index):
+            # The audio is safely stored; marking the part failed (rather
+            # than leaving it queued) lets both the upload queue's automatic
+            # retries and the manual Retry button re-upload and re-dispatch
+            # it instead of silently returning the stuck part forever.
+            await _mark_dispatch_failed(db, session, part)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Transcription could not be queued. Retry this recording part.",
+            )
     return RecordingPartQueued(part_id=part.id, status=part.status)
 
 
@@ -246,14 +287,22 @@ async def retry_recording_part(
     part = await get_part(db, session_id=session_id, part_index=part_index)
     if part is None:
         raise NoteNotFound()
-    if part.status != "failed":
-        raise HTTPException(status_code=409, detail="Only failed recording parts can be retried.")
+    if part.status not in {"failed", "queued"}:
+        # "queued" parts can be stuck when a dispatch was lost (broker or
+        # worker outage); re-dispatching them is safe because the worker
+        # ignores parts that are already processing or done.
+        raise HTTPException(status_code=409, detail="Only failed or stuck recording parts can be retried.")
     part.status = "queued"
     part.attempts = 0
     part.error_code = None
     session.status = "processing" if session.finish_requested else "recording"
     await db.commit()
-    await _dispatch_part(session_id, part_index)
+    if not await _try_dispatch_part(session_id, part_index):
+        await _mark_dispatch_failed(db, session, part)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Transcription could not be queued. Retry this recording part.",
+        )
     return RecordingPartQueued(part_id=part.id, status=part.status)
 
 

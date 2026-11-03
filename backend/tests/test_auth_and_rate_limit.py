@@ -49,6 +49,54 @@ def test_firebase_identity_is_upserted_and_invalid_tokens_are_rejected(api_harne
     assert error.value.status_code == 401
 
 
+def test_recording_reads_use_polling_rate_limit_bucket(api_harness):
+    """Recording status polling must not burn the general write budget.
+
+    The record page polls session/speakers/parts every few seconds; counting
+    those GETs against the 60/min general limit produced the 429s that
+    stalled uploads and retries in production.
+    """
+    captured: list[tuple[int, str]] = []
+
+    class FakeRedis:
+        async def eval(self, _script, _num_keys, _key, _now, _window, limit, _member):
+            captured.append((int(limit), _key))
+            return [1, 0]
+
+    def make_request(method: str, path: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": method,
+                "scheme": "http",
+                "path": path,
+                "raw_path": path.encode(),
+                "query_string": b"",
+                "headers": [],
+                "server": ("testserver", 80),
+                "client": ("testclient", 1234),
+            }
+        )
+
+    user = AuthedUser(id="polling-user")
+
+    async def run():
+        fake = FakeRedis()
+        await rate_limit(make_request("GET", "/v1/record/sessions/abc"), user, fake)
+        await rate_limit(make_request("GET", "/v1/record/sessions/abc/parts/0"), user, fake)
+        await rate_limit(make_request("POST", "/v1/record/sessions/abc/parts"), user, fake)
+
+    asyncio.run(run())
+    assert captured[0][0] == settings.polling_rate_limit_per_minute
+    assert captured[0][1].endswith(":poll")
+    assert captured[1][0] == settings.polling_rate_limit_per_minute
+    # Uploads stay on the general budget so polling can never starve them.
+    assert captured[2][0] == settings.rate_limit_per_minute
+    assert captured[2][1].endswith(":general")
+
+
 def test_rate_limit_is_shared_between_redis_clients(api_harness, monkeypatch):
     monkeypatch.setattr(settings, "rate_limit_per_minute", 2)
     user = AuthedUser(id=f"rate-limit-{uuid.uuid4()}")
