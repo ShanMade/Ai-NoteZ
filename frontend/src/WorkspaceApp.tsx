@@ -1,13 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, Cloud, Command, FileDown,
-  FilePlus2, Folder, Layers3, Menu, Mic2, Moon, Network, Plus, Search, Settings2, Share2,
-  Sparkles, Sun, Trash2, X,
+  ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, Cloud, FileDown,
+  FilePlus2, Folder, Menu, Mic2, Moon, Plus, Search, Settings2, Share2,
+  Sparkles, Sun, Tag, Trash2, X, Monitor,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import type { LanguageChoice } from "./i18n";
 import { apiRequest } from "./api/client";
 import { createNote, deleteNote, getChildren, getNote, listAllNotes, shareNote, updateNote, type Note, type NoteInput } from "./api/notes";
 import { getCachedNotes, getQueuedOperations, saveCachedNotes } from "./offline/queue";
@@ -17,6 +16,7 @@ import { useOfflineSync } from "./hooks/useOfflineSync";
 import { useAuthStore } from "./store/auth";
 import { useUiStore } from "./store/ui";
 import { resolveTheme } from "./theme";
+import { DIRECTIONS } from "./design-directions/directionMeta";
 import "./workspace.css";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
@@ -431,11 +431,17 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
           aria-label={t("editor.noteTitle")}
           maxLength={500}
         />
-        <div className="workspace-note-meta">
-          <label>{t("editor.folder")} <input value={draft.folder_path ?? ""} onChange={(event) => setDraft((current) => ({ ...current, folder_path: event.target.value }))} placeholder="/Ideas" /></label>
-          <label>{t("editor.kind")} <select value={draft.kind ?? "note"} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
-            {["note", "idea", "meeting", "reference", "recording"].map((kind) => <option key={kind}>{kind}</option>)}
-          </select></label>
+        <div className="workspace-note-props">
+          <div className="workspace-note-prop">
+            <span className="workspace-note-prop-label"><Folder size={14} />{t("editor.folder")}</span>
+            <input value={draft.folder_path ?? ""} onChange={(event) => setDraft((current) => ({ ...current, folder_path: event.target.value }))} placeholder="/Ideas" aria-label={t("editor.folder")} />
+          </div>
+          <div className="workspace-note-prop">
+            <span className="workspace-note-prop-label"><Tag size={14} />{t("editor.kind")}</span>
+            <select value={draft.kind ?? "note"} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))} aria-label={t("editor.kind")}>
+              {["note", "idea", "meeting", "reference", "recording"].map((kind) => <option key={kind}>{kind}</option>)}
+            </select>
+          </div>
         </div>
         <Suspense fallback={<div className="workspace-note-body workspace-editor-loading" aria-busy="true" />}>
           <NoteBodyEditor
@@ -493,6 +499,10 @@ export default function WorkspaceApp() {
   const setTheme = useUiStore((state) => state.setTheme);
   const direction = useUiStore((state) => state.direction);
   const setDirection = useUiStore((state) => state.setDirection);
+  const readerTextSize = useUiStore((state) => state.readerTextSize);
+  const setReaderTextSize = useUiStore((state) => state.setReaderTextSize);
+  const readerWidth = useUiStore((state) => state.readerWidth);
+  const setReaderWidth = useUiStore((state) => state.setReaderWidth);
   const language = useUiStore((state) => state.language);
   const setLanguage = useUiStore((state) => state.setLanguage);
   const ownerId = user?.uid ?? "";
@@ -923,48 +933,112 @@ export default function WorkspaceApp() {
           if (event.target === event.currentTarget) setSettingsOpen(false);
         }}>
           <section ref={settingsDialogRef} className="workspace-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-settings-title" tabIndex={-1}>
-            <header><div><p className="workspace-eyebrow">{t("settings.eyebrow")}</p><h2 id="workspace-settings-title">{t("settings.title")}</h2></div><button className="workspace-icon-button" aria-label={t("errors.close")} onClick={() => setSettingsOpen(false)}><X size={16} /></button></header>
-            <p>{t("settings.description")}</p>
-            <div className="workspace-theme-options">
-              {(["light", "dark", "system"] as const).map((choice) => (
-                <button key={choice} aria-pressed={theme === choice} className={theme === choice ? "is-selected" : ""} onClick={() => setTheme(choice)}>
-                  {choice === "light" ? <Sun size={16} /> : choice === "dark" ? <Moon size={16} /> : <Cloud size={16} />}
-                  <span>{t(`settings.${choice}`)}</span>
-                  {theme === choice && <Check size={14} />}
-                </button>
-              ))}
-            </div>
-            <div className="workspace-direction-setting">
-              <span>{t("settings.direction")}</span>
-              <div className="workspace-direction-options" role="group" aria-label={t("settings.direction")}>
-                {([
-                  ["a", "precision", Command],
-                  ["b", "workspace", Layers3],
-                  ["c", "graph", Network],
-                ] as const).map(([choice, label, Icon]) => (
-                  <button
-                    key={choice}
-                    type="button"
-                    aria-pressed={direction === choice}
-                    className={direction === choice ? "is-selected" : ""}
-                    onClick={() => setDirection(choice)}
-                  >
-                    <Icon size={15} />
-                    <span>{t(`settings.${label}`)}</span>
-                  </button>
-                ))}
+            <header className="workspace-settings-header">
+              <div>
+                <p className="workspace-eyebrow">{t("settings.eyebrow")}</p>
+                <h2 id="workspace-settings-title">{t("settings.title")}</h2>
+                <p className="workspace-settings-lede">{t("settings.description")}</p>
               </div>
-            </div>
-            <label className="workspace-language-select">{t("settings.language")}
-              <select value={language} onChange={(event) => setLanguage(event.target.value as LanguageChoice)}>
-                <option value="en">English</option>
-                <option value="ur">اردو</option>
-                <option value="hi">हिन्दी</option>
-              </select>
-            </label>
-            <div className="workspace-export-row">
-              <div><strong>{t("settings.takeNotes")}</strong><p>{t("settings.exportDescription")}</p></div>
-              <button className="workspace-secondary" disabled={exporting} onClick={() => void exportAccount()}><FileDown size={14} />{exporting ? t("settings.preparing") : t("settings.export")}</button>
+              <button className="workspace-icon-button" aria-label={t("errors.close")} onClick={() => setSettingsOpen(false)}><X size={16} /></button>
+            </header>
+
+            <div className="workspace-settings-body">
+              <section className="workspace-settings-section" aria-labelledby="settings-appearance">
+                <h3 id="settings-appearance">{t("settings.appearanceTitle", { defaultValue: "Appearance" })}</h3>
+                <div className="workspace-theme-cards" role="group" aria-label={t("settings.appearanceTitle", { defaultValue: "Appearance" })}>
+                  {([
+                    ["light", Sun, t("settings.lightHint", { defaultValue: "Bright paper, always" })],
+                    ["dark", Moon, t("settings.darkHint", { defaultValue: "Easy on the eyes, always" })],
+                    ["system", Monitor, t("settings.systemHint", { defaultValue: "Matches your device" })],
+                  ] as const).map(([choice, Icon, hint]) => (
+                    <button key={choice} type="button" aria-pressed={theme === choice} className={`workspace-theme-card ${theme === choice ? "is-selected" : ""}`} onClick={() => setTheme(choice)}>
+                      <span className={`workspace-theme-swatch workspace-theme-swatch-${choice}`} aria-hidden="true"><span /><span /></span>
+                      <span className="workspace-theme-card-copy"><strong><Icon size={14} /> {t(`settings.${choice}`)}</strong><small>{hint}</small></span>
+                      {theme === choice && <Check size={14} className="workspace-theme-check" />}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="workspace-settings-section" aria-labelledby="settings-direction">
+                <h3 id="settings-direction">{t("settings.direction")}</h3>
+                <p className="workspace-settings-hint">{t("settings.directionHint", { defaultValue: "Changes the type, colour and layout across the workspace." })}</p>
+                <div className="workspace-direction-cards" role="group" aria-label={t("settings.direction")}>
+                  {DIRECTIONS.map((meta) => {
+                    const selected = direction === meta.id;
+                    const { Glyph } = meta;
+                    const palette = resolveTheme(theme) === "dark" ? meta.dark : meta.light;
+                    return (
+                      <button
+                        key={meta.id}
+                        type="button"
+                        aria-pressed={selected}
+                        className={`workspace-direction-card ${selected ? "is-selected" : ""}`}
+                        style={{ "--dir-accent": palette.accent, "--dir-surface": palette.surface, "--dir-ink": palette.ink } as CSSProperties}
+                        onClick={() => setDirection(meta.id)}
+                      >
+                        <span className="workspace-direction-head">
+                          <span className="workspace-direction-glyph"><Glyph size={18} /></span>
+                          <span className="workspace-direction-title"><strong>{t(`settings.${meta.labelKey}`)}</strong><small>{meta.reference}</small></span>
+                          {selected && <Check size={15} className="workspace-direction-check" />}
+                        </span>
+                        <span className="workspace-direction-summary">{meta.summary}</span>
+                        <span className="workspace-direction-preview" aria-hidden="true">
+                          <span className="workspace-direction-preview-bar" />
+                          <span className="workspace-direction-preview-line" />
+                          <span className="workspace-direction-preview-line short" />
+                        </span>
+                        <span className="workspace-direction-swatches" aria-hidden="true">
+                          <i title="Accent" style={{ background: meta.light.accent }} />
+                          <i title="Surface" style={{ background: meta.light.surface }} />
+                          <i title="Ink" style={{ background: meta.light.ink }} />
+                          <b />
+                          <i title="Accent (dark)" style={{ background: meta.dark.accent }} />
+                          <i title="Surface (dark)" style={{ background: meta.dark.surface }} />
+                          <i title="Ink (dark)" style={{ background: meta.dark.ink }} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="workspace-settings-section" aria-labelledby="settings-reading">
+                <h3 id="settings-reading">{t("settings.readingTitle", { defaultValue: "Reading" })}</h3>
+                <div className="workspace-setting-row">
+                  <div><strong>{t("settings.textSize", { defaultValue: "Text size" })}</strong><small>{t("settings.textSizeHint", { defaultValue: "Size of body text in notes" })}</small></div>
+                  <div className="workspace-segmented" role="group" aria-label={t("settings.textSize", { defaultValue: "Text size" })}>
+                    {([["small", "Small"], ["comfortable", "Medium"], ["large", "Large"]] as const).map(([value, label]) => (
+                      <button key={value} type="button" aria-pressed={readerTextSize === value} className={readerTextSize === value ? "is-selected" : ""} onClick={() => setReaderTextSize(value)}>{t(`settings.size_${value}`, { defaultValue: label })}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="workspace-setting-row">
+                  <div><strong>{t("settings.lineWidth", { defaultValue: "Line width" })}</strong><small>{t("settings.lineWidthHint", { defaultValue: "How wide the text column can grow" })}</small></div>
+                  <div className="workspace-segmented" role="group" aria-label={t("settings.lineWidth", { defaultValue: "Line width" })}>
+                    {([["narrow", "Narrow"], ["comfortable", "Medium"], ["wide", "Wide"]] as const).map(([value, label]) => (
+                      <button key={value} type="button" aria-pressed={readerWidth === value} className={readerWidth === value ? "is-selected" : ""} onClick={() => setReaderWidth(value)}>{t(`settings.width_${value}`, { defaultValue: label })}</button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className="workspace-settings-section" aria-labelledby="settings-language">
+                <h3 id="settings-language">{t("settings.language")}</h3>
+                <div className="workspace-segmented" role="group" aria-label={t("settings.language")}>
+                  {([["en", "English"], ["ur", "اردو"], ["hi", "हिन्दी"]] as const).map(([value, label]) => (
+                    <button key={value} type="button" aria-pressed={language === value} className={language === value ? "is-selected" : ""} onClick={() => setLanguage(value)}>{label}</button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="workspace-settings-section" aria-labelledby="settings-data">
+                <h3 id="settings-data">{t("settings.dataTitle", { defaultValue: "Your data" })}</h3>
+                <div className="workspace-export-row">
+                  <div><strong>{t("settings.takeNotes")}</strong><p>{t("settings.exportDescription")}</p></div>
+                  <button className="workspace-secondary" disabled={exporting} onClick={() => void exportAccount()}><FileDown size={14} />{exporting ? t("settings.preparing") : t("settings.export")}</button>
+                </div>
+              </section>
             </div>
           </section>
         </div>

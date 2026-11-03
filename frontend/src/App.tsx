@@ -47,6 +47,8 @@ function AuthInitializer() {
 export default function App() {
   const theme = useUiStore((state) => state.theme);
   const direction = useUiStore((state) => state.direction);
-  useDocumentTheme(theme, direction);
+  const readerSize = useUiStore((state) => state.readerTextSize);
+  const readerWidth = useUiStore((state) => state.readerWidth);
+  useDocumentTheme(theme, direction, readerSize, readerWidth);
   return <AuthInitializer />;
 }

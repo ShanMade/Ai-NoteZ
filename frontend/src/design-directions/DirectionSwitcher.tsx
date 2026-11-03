@@ -1,4 +1,5 @@
-import { ArrowDownRight, ArrowRight, Command, Layers3, Network, Sparkles } from "lucide-react";
+import { ArrowDownRight, ArrowRight, Sparkles } from "lucide-react";
+import { DIRECTIONS, GraphGlyph, PrecisionGlyph, WorkspaceGlyph } from "./directionMeta";
 import { Link } from "react-router-dom";
 
 const directions = [
@@ -8,8 +9,8 @@ const directions = [
     reference: "A · Linear-inspired",
     description: "A crisp, keyboard-first workspace for people who like their tools quiet and quick.",
     traits: ["Focused", "Compact", "Clear"],
-    icon: Command,
-    swatches: ["#6d63d9", "#f7f8fa", "#20232a"],
+    icon: PrecisionGlyph,
+    swatches: [DIRECTIONS[0].light.accent, DIRECTIONS[0].light.surface, DIRECTIONS[0].light.ink],
   },
   {
     id: "b",
@@ -17,8 +18,8 @@ const directions = [
     reference: "B · Notion-inspired",
     description: "A warmer, more spacious notebook that gives your words the room they need.",
     traits: ["Warm", "Expressive", "Open"],
-    icon: Layers3,
-    swatches: ["#b56d4c", "#fbf8f2", "#302d29"],
+    icon: WorkspaceGlyph,
+    swatches: [DIRECTIONS[1].light.accent, DIRECTIONS[1].light.surface, DIRECTIONS[1].light.ink],
   },
   {
     id: "c",
@@ -26,8 +27,8 @@ const directions = [
     reference: "C · Obsidian-inspired",
     description: "A connected thinking space where ideas feel like part of a living constellation.",
     traits: ["Connected", "Atmospheric", "Electric"],
-    icon: Network,
-    swatches: ["#b34bf2", "#e5e8eb", "#20272e"],
+    icon: GraphGlyph,
+    swatches: [DIRECTIONS[2].light.accent, DIRECTIONS[2].light.surface, DIRECTIONS[2].light.ink],
   },
 ];
 

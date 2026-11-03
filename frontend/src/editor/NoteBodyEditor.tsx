@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { Bold, Code, Heading2, Italic, Link as LinkIcon, List, ListOrdered, Quote, Sigma } from "lucide-react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
@@ -86,6 +87,19 @@ export function NoteBodyEditor({ value, notes, placeholder, onChange, onKindChan
     return notes.filter((note) => note.title.toLocaleLowerCase().includes(query)).slice(0, 5);
   }, [menu, notes]);
 
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: current }) => ({
+      bold: current?.isActive("bold") ?? false,
+      italic: current?.isActive("italic") ?? false,
+      heading: current?.isActive("heading", { level: 2 }) ?? false,
+      quote: current?.isActive("blockquote") ?? false,
+      bullet: current?.isActive("bulletList") ?? false,
+      ordered: current?.isActive("orderedList") ?? false,
+      code: current?.isActive("codeBlock") ?? false,
+    }),
+  });
+
   if (!editor) return <div className="workspace-note-body workspace-editor-loading" aria-busy="true" />;
 
   const selectWikiLink = (note: Note) => {
@@ -117,13 +131,25 @@ export function NoteBodyEditor({ value, notes, placeholder, onChange, onKindChan
 
   return (
     <div className="workspace-rich-editor">
-      <div className="workspace-editor-formatting" aria-label={t("editor.formatting")}>
-        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} aria-label={t("editor.bold")} aria-pressed={editor.isActive("bold")}><strong>B</strong></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label={t("editor.italic")} aria-pressed={editor.isActive("italic")}><em>I</em></button>
-        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label={t("editor.heading")}>H₂</button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label={t("editor.bulletedList")}>• —</button>
-        <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} aria-label={t("editor.codeBlock")}>&lt;/&gt;</button>
-        <span>{t("editor.commandsHint")} <kbd>/</kbd> · <kbd>[[</kbd> {t("editor.referenceHint")}</span>
+      <div className="workspace-editor-formatting" role="toolbar" aria-label={t("editor.formatting")}>
+        <div className="workspace-format-group">
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleBold().run()} aria-label={t("editor.bold")} title={t("editor.bold")} aria-pressed={active?.bold ?? false}><Bold size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleItalic().run()} aria-label={t("editor.italic")} title={t("editor.italic")} aria-pressed={active?.italic ?? false}><Italic size={15} /></button>
+        </div>
+        <span className="workspace-format-divider" aria-hidden="true" />
+        <div className="workspace-format-group">
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label={t("editor.heading")} title={t("editor.heading")} aria-pressed={active?.heading ?? false}><Heading2 size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label={t("editor.quote", { defaultValue: "Quote" })} title={t("editor.quote", { defaultValue: "Quote" })} aria-pressed={active?.quote ?? false}><Quote size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label={t("editor.bulletedList")} title={t("editor.bulletedList")} aria-pressed={active?.bullet ?? false}><List size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label={t("editor.numberedList", { defaultValue: "Numbered list" })} title={t("editor.numberedList", { defaultValue: "Numbered list" })} aria-pressed={active?.ordered ?? false}><ListOrdered size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().toggleCodeBlock().run()} aria-label={t("editor.codeBlock")} title={t("editor.codeBlock")} aria-pressed={active?.code ?? false}><Code size={15} /></button>
+        </div>
+        <span className="workspace-format-divider" aria-hidden="true" />
+        <div className="workspace-format-group">
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().insertInlineMath({ latex: "x^2" }).run()} aria-label={t("editor.inlineMath")} title={t("editor.inlineMath")}><Sigma size={15} /></button>
+          <button type="button" className="workspace-format-btn" onClick={() => editor.chain().focus().insertContent("[[").run()} aria-label={t("editor.insertNoteLink")} title={t("editor.insertNoteLink")}><LinkIcon size={15} /></button>
+        </div>
+        <span className="workspace-format-hint">{t("editor.commandsHint")} <kbd>/</kbd> · <kbd>[[</kbd> {t("editor.referenceHint")}</span>
       </div>
       <EditorContent editor={editor} className="workspace-note-body" />
       {menu?.kind === "slash" && (

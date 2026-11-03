@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { DesignDirection, ThemeChoice } from "./store/ui";
+import type { DesignDirection, ReaderTextSize, ReaderWidth, ThemeChoice } from "./store/ui";
 
 export type ResolvedTheme = "light" | "dark";
 
@@ -21,7 +21,12 @@ export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
  * them on the document root (not only on the workspace wrapper) lets the page background, body
  * text and any overlay outside the wrapper use the same palette as the app.
  */
-export function useDocumentTheme(choice: ThemeChoice, direction: DesignDirection): ResolvedTheme {
+export function useDocumentTheme(
+  choice: ThemeChoice,
+  direction: DesignDirection,
+  readerSize: ReaderTextSize,
+  readerWidth: ReaderWidth,
+): ResolvedTheme {
   const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveTheme(choice));
 
   useEffect(() => {
@@ -30,6 +35,8 @@ export function useDocumentTheme(choice: ThemeChoice, direction: DesignDirection
       const root = document.documentElement;
       root.dataset.direction = direction;
       root.dataset.theme = next;
+      root.dataset.readerSize = readerSize;
+      root.dataset.readerWidth = readerWidth;
       root.style.colorScheme = next;
       setResolved(next);
     };
@@ -38,7 +45,7 @@ export function useDocumentTheme(choice: ThemeChoice, direction: DesignDirection
     const media = window.matchMedia(DARK_QUERY);
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [choice, direction]);
+  }, [choice, direction, readerSize, readerWidth]);
 
   return resolved;
 }
