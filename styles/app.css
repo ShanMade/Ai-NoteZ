@@ -2537,3 +2537,268 @@ html[data-theme="dark"] #nz-ai { --v3-card: #16263a; --v3-edge: rgba(173,194,220
   #nz-ai .ai-card small { max-width: 210px; text-align: left; line-height: 1.4; }
   #nz-ai .ai-hint { margin-top: 20px; }
 }
+
+/* =========================================================
+   Note workspace refresh: a quiet reading surface with clear
+   action hierarchy. Kept scoped to the legacy reader/editor.
+   ========================================================= */
+:root {
+  --note-canvas: #f3f6f5;
+  --note-surface: #ffffff;
+  --note-ink: #20313b;
+  --note-muted: #71818a;
+  --note-faint: #8b999f;
+  --note-line: rgba(31, 59, 67, .12);
+  --note-line-strong: rgba(31, 59, 67, .2);
+  --note-soft: rgba(31, 59, 67, .045);
+  --note-accent-soft: color-mix(in srgb, var(--nz-accent) 9%, transparent);
+  --note-shadow: 0 12px 34px rgba(31, 58, 67, .08);
+  --read-size: 16px;
+  --read-lh: 1.82;
+  --read-w: 880px;
+}
+html[data-theme="dark"] {
+  --note-canvas: #0b1420;
+  --note-surface: #111d2b;
+  --note-ink: #e6eef4;
+  --note-muted: #9aabba;
+  --note-faint: #8395a5;
+  --note-line: rgba(173, 194, 220, .14);
+  --note-line-strong: rgba(173, 194, 220, .24);
+  --note-soft: rgba(173, 194, 220, .055);
+  --note-shadow: 0 18px 50px rgba(0, 0, 0, .23);
+}
+
+.app-shell.note-workspace-mode .workspace-main { background: var(--note-canvas); }
+.app-shell.note-workspace-mode .reader-progress { background: transparent; }
+.app-shell.note-workspace-mode .reader-progress-fill { background: var(--nz-accent); box-shadow: 0 0 10px color-mix(in srgb, var(--nz-accent) 28%, transparent); }
+.note-view { padding: clamp(16px, 2.8vw, 34px) clamp(18px, 4vw, 62px) 72px; }
+.reader-toolbar-row {
+  position: sticky;
+  top: 2px;
+  z-index: 8;
+  width: min(100%, 960px);
+  min-height: 48px;
+  margin: 0 auto 18px;
+  padding: 6px 2px;
+  background: color-mix(in srgb, var(--note-canvas) 91%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--note-line) 70%, transparent);
+  backdrop-filter: blur(14px);
+}
+.reader-crumb { color: var(--note-muted); font-size: 11px; gap: 8px; }
+.reader-crumb .icon { color: var(--note-faint); }
+.reader-crumb strong { color: var(--note-ink); font-weight: 620; }
+.reader-tools {
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--note-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--note-surface) 86%, transparent);
+  box-shadow: 0 3px 12px rgba(31, 58, 67, .04);
+}
+.reader-tool-group { display: flex; align-items: center; gap: 4px; }
+.reader-tool-group + .reader-tool-group { padding-left: 6px; border-left: 1px solid var(--note-line); }
+.reader-tool {
+  width: auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 9px;
+  border-color: transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--note-muted);
+  font-size: 10px;
+  font-weight: 620;
+}
+.reader-tool .icon { width: 15px; height: 15px; }
+.reader-tool:hover,
+.reader-tool:focus-visible { color: var(--note-ink); border-color: var(--note-line); background: var(--note-soft); outline: none; }
+.reader-tool[aria-expanded="true"],
+.reader-tool.reader-ai-action[aria-expanded="true"],
+html.nzai-open .reader-ai-action { color: var(--nz-accent); border-color: color-mix(in srgb, var(--nz-accent) 24%, var(--note-line)); background: var(--note-accent-soft); }
+.reader-tool.focus-action { color: var(--nz-accent); border-color: color-mix(in srgb, var(--nz-accent) 24%, transparent); background: var(--note-accent-soft); }
+.reader-tool.focus-action:hover { background: color-mix(in srgb, var(--nz-accent) 15%, transparent); }
+.reader-tool.starred { color: #b27c1d; border-color: rgba(178, 124, 29, .2); background: rgba(178, 124, 29, .06); }
+.note-view:not(.pdf-attachment-reading) .reader-paper {
+  width: min(100%, var(--read-w));
+  min-height: 680px;
+  padding: clamp(42px, 6vw, 78px) clamp(30px, 8vw, 96px) 70px;
+  border: 1px solid var(--note-line);
+  border-radius: 16px;
+  background: var(--note-surface);
+  box-shadow: var(--note-shadow);
+}
+.note-view.pdf-attachment-reading .reader-paper { max-width: 1420px; }
+.article-kicker { color: var(--note-muted); font-size: 10px; letter-spacing: .12em; }
+.article-kicker .kicker-dot { background: var(--nz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nz-accent) 12%, transparent); }
+.article-kicker .reading-time { color: var(--note-faint); }
+.reader-title {
+  max-width: 740px;
+  margin: 24px 0 15px;
+  color: var(--note-ink);
+  font-size: clamp(34px, 4.2vw, 52px);
+  font-weight: 640;
+  letter-spacing: -.055em;
+  line-height: 1.04;
+}
+.reader-subtitle { margin-bottom: 31px; color: var(--note-muted); font-size: 11px; }
+.reader-subject { color: var(--nz-accent); font-weight: 620; }
+.reader-subtitle .meta-divider { background: var(--note-faint); }
+.reader-rule, .reader-footer { border-color: color-mix(in srgb, var(--nz-accent) 24%, var(--note-line)); }
+.reader-rule { margin-bottom: 34px; }
+.markdown-body#viewer-content { color: var(--note-ink); font-size: var(--read-size); line-height: var(--read-lh); }
+.markdown-body h2, .markdown-body h3, .markdown-body h4 { color: var(--note-ink); font-weight: 700; }
+.markdown-body h2 { margin-top: 42px; font-size: 25px; }
+.markdown-body h3 { margin-top: 32px; font-size: 19px; }
+.markdown-body h4 { font-size: 16px; }
+.markdown-body p { margin-bottom: 20px; }
+.markdown-body ul, .markdown-body ol { margin-top: 10px; margin-bottom: 23px; }
+.markdown-body blockquote { margin: 27px 0; padding: 11px 0 11px 20px; color: color-mix(in srgb, var(--note-ink) 72%, var(--note-muted)); background: linear-gradient(90deg, var(--note-accent-soft), transparent 78%); }
+.markdown-body strong { color: var(--note-ink); }
+.markdown-body code { color: var(--nz-accent); background: color-mix(in srgb, var(--nz-accent) 10%, transparent); }
+.markdown-body a { color: var(--nz-accent); }
+.plain-text { color: var(--note-ink); font-size: 13px; line-height: 1.8; }
+.reader-footer { margin-top: 48px; padding-top: 17px; color: var(--note-faint); font-size: 10px; }
+.reader-outline { margin: -13px 0 28px; border-color: var(--note-line); border-radius: 10px; background: var(--note-soft); }
+.reader-outline-toggle { min-height: 39px; color: var(--note-muted); }
+.reader-outline-toggle span { font-size: 10px; }
+.reader-outline-list { border-color: var(--note-line); }
+.reader-outline-link { color: var(--note-muted); font-size: 10px; }
+.reader-outline-link:hover, .reader-outline-link:focus-visible { color: var(--nz-accent); background: var(--note-accent-soft); }
+.reader-paper > .subtle, #viewer-content > .subtle { color: var(--note-muted); }
+
+/* Editor: the same canvas and spacing system as the reader. */
+.app-shell.note-workspace-mode .editor-panel { background: var(--note-canvas); }
+.editor-panel { padding: clamp(22px, 4vw, 42px) clamp(18px, 5vw, 72px) 64px; }
+.editor-inner { max-width: 920px; }
+.editor-head { margin-bottom: 30px; padding-bottom: 20px; border-color: var(--note-line); }
+.editor-heading .editor-icon { width: 40px; height: 40px; border-radius: 12px; color: var(--nz-accent); border-color: color-mix(in srgb, var(--nz-accent) 20%, var(--note-line)); background: var(--note-accent-soft); }
+.editor-heading h2 { color: var(--note-ink); font-size: 18px; }
+.editor-heading p { color: var(--note-muted); font-size: 11px; }
+.editor-actions { gap: 8px; }
+.editor-save-status { min-height: 30px; padding: 0 9px; border: 1px solid var(--note-line); border-radius: 999px; color: var(--note-muted); font-size: 10px; background: var(--note-soft); }
+.editor-save-status i { width: 7px; height: 7px; }
+.ghost-button { min-height: 34px; border-color: var(--note-line); color: var(--note-muted); border-radius: 8px; }
+.ghost-button:hover { color: var(--note-ink); border-color: var(--note-line-strong); background: var(--note-soft); }
+.editor-save { min-height: 36px; padding-inline: 16px; }
+.editor-form { gap: 25px; }
+.editor-field { gap: 9px; }
+.editor-field label { color: var(--note-muted); font-size: 10px; letter-spacing: .08em; }
+.editor-input, .editor-textarea { border-color: var(--note-line); color: var(--note-ink); background: var(--note-surface); }
+.editor-input { min-height: 42px; padding: 11px 13px; }
+.editor-input.large { min-height: 52px; padding: 13px 15px; color: var(--note-ink); font-size: 25px; }
+.editor-input:focus, .editor-textarea:focus { border-color: color-mix(in srgb, var(--nz-accent) 50%, var(--note-line)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--nz-accent) 9%, transparent); }
+.editor-two-col { gap: 20px; }
+.editor-body-head { margin-bottom: 1px; }
+.editor-mode-tabs { border-color: var(--note-line); background: var(--note-soft); border-radius: 9px; }
+.editor-mode-tab { min-height: 30px; padding-inline: 12px; color: var(--note-muted); }
+.editor-mode-tab.active { color: var(--note-ink); background: var(--note-surface); box-shadow: 0 1px 3px rgba(31, 58, 67, .08); }
+.markdown-toolbar { margin-top: 0; padding: 7px; border-color: var(--note-line); border-radius: 10px; background: var(--note-soft); }
+.markdown-toolbar button { min-width: 32px; height: 30px; color: var(--note-muted); border-radius: 7px; }
+.markdown-toolbar button:hover, .markdown-toolbar button:focus-visible { color: var(--nz-accent); border-color: color-mix(in srgb, var(--nz-accent) 30%, var(--note-line)); background: var(--note-accent-soft); }
+.editor-textarea { min-height: 420px; padding: 18px; color: var(--note-ink); font-size: 13px; line-height: 1.78; }
+.editor-preview { min-height: 420px; padding: 20px; border: 1px solid var(--note-line); border-radius: 10px; background: var(--note-surface); }
+.editor-hint, .editor-info { color: var(--note-muted); font-size: 10px; }
+.editor-attachment { border-color: var(--note-line); background: var(--note-soft); color: var(--note-ink); }
+
+/* Tablet canvas: keep navigation, remove the secondary note list while reading/editing. */
+@media (max-width: 1100px) and (min-width: 681px) {
+  .app-shell.note-workspace-mode .library-pane { display: none; }
+  .app-shell.note-workspace-mode .workarea { grid-template-columns: minmax(0, 1fr); }
+  .note-view { padding-inline: clamp(22px, 5vw, 54px); }
+  .reader-toolbar-row { width: min(100%, 900px); }
+  .note-view:not(.pdf-attachment-reading) .reader-paper { width: min(100%, 820px); padding-inline: clamp(34px, 8vw, 86px); }
+}
+
+@media (max-width: 680px) {
+  .note-view { padding: 10px 10px 34px; }
+  .reader-toolbar-row { min-height: 44px; gap: 6px; margin-bottom: 12px; padding: 4px 0; }
+  .reader-crumb { flex: 1 1 auto; min-width: 0; gap: 5px; }
+  .reader-crumb .crumb-path { max-width: 42vw; }
+  .reader-tools { flex: 0 0 auto; max-width: 57%; gap: 3px; padding: 3px; overflow-x: auto; scrollbar-width: none; }
+  .reader-tools::-webkit-scrollbar { display: none; }
+  .reader-tool-group { gap: 2px; }
+  .reader-tool-group + .reader-tool-group { padding-left: 4px; }
+  .reader-tool { width: 36px; min-width: 36px; height: 36px; padding: 0; }
+  .reader-tool-label { display: none; }
+  .note-view:not(.pdf-attachment-reading) .reader-paper { width: 100%; min-height: 600px; padding: 38px 22px 52px; border-radius: 13px; }
+  .reader-title { font-size: clamp(31px, 8vw, 41px); }
+  .reader-subtitle { margin-bottom: 26px; }
+  .markdown-body#viewer-content { font-size: 15px; line-height: 1.8; }
+  .markdown-body h2 { margin-top: 35px; font-size: 22px; }
+  .markdown-body h3 { margin-top: 28px; font-size: 18px; }
+  .reader-footer { flex-wrap: wrap; gap: 6px 14px; margin-top: 38px; }
+  .editor-panel { padding: 18px 14px 42px; }
+  .editor-head { align-items: flex-start; flex-wrap: wrap; gap: 18px; }
+  .editor-heading { min-width: 0; }
+  .editor-actions { width: 100%; flex-wrap: wrap; }
+  .editor-save-status { margin-right: auto; }
+  .editor-two-col { grid-template-columns: 1fr; gap: 17px; }
+  .editor-input.large { font-size: 22px; }
+  .editor-textarea, .editor-preview { min-height: 300px; }
+  .markdown-toolbar { gap: 3px; }
+  .markdown-toolbar button { min-width: 40px; min-height: 40px; height: 40px; }
+  .app-shell.focus-mode .reader-paper { padding: 34px 22px 50px; }
+}
+
+@media (max-width: 420px) {
+  .note-view { padding-inline: 7px; }
+  .reader-toolbar-row { gap: 4px; }
+  .reader-back span { display: none; }
+  .reader-crumb { gap: 3px; }
+  .reader-crumb .crumb-path { max-width: 31vw; }
+  .reader-tools { max-width: 68%; }
+  .reader-tool { width: 33px; min-width: 33px; height: 33px; border-radius: 8px; }
+  .reader-tool .icon { width: 14px; height: 14px; }
+  .reader-tool-group + .reader-tool-group { padding-left: 3px; }
+  .reader-tool.hide-xs { display: none; }
+  .note-view:not(.pdf-attachment-reading) .reader-paper { padding: 31px 17px 44px; border-radius: 11px; }
+  .article-kicker { font-size: 9px; }
+  .reader-title { margin-top: 20px; font-size: clamp(29px, 9vw, 36px); }
+  .reader-subtitle { gap: 6px; font-size: 10px; }
+  .reader-outline { margin-bottom: 20px; }
+  .editor-panel { padding-inline: 11px; }
+  .editor-actions { gap: 6px; }
+  .editor-save-status { flex: 1 1 100%; order: -1; margin-right: 0; }
+  .editor-actions .ghost-button, .editor-save { min-height: 40px; }
+  .editor-save { flex: 1 1 auto; }
+  .editor-heading h2 { font-size: 16px; }
+  .editor-heading p { max-width: 185px; }
+  .editor-input.large { font-size: 20px; }
+  .editor-textarea { padding: 14px; font-size: 12px; }
+}
+
+@media (max-width: 340px) {
+  .reader-crumb .crumb-path { max-width: 25vw; }
+  .reader-tools { max-width: 73%; }
+  .reader-tool { width: 31px; min-width: 31px; }
+  .note-view:not(.pdf-attachment-reading) .reader-paper { padding-inline: 15px; }
+  .reader-title { font-size: 29px; }
+}
+
+/* Preserve the full-bleed reading contract of focus and PDF modes. */
+.app-shell.focus-mode .workspace-main { background: var(--paper); }
+.app-shell.focus-mode .reader-paper { width: 100%; max-width: none; border: 0; border-radius: 0; box-shadow: none; }
+.app-shell.focus-mode .note-view:not(.pdf-attachment-reading) .reader-paper { min-height: 100vh; min-height: 100dvh; margin: 0; padding: clamp(38px, 7vh, 76px) clamp(22px, 6vw, 100px) 56px; }
+.app-shell.focus-mode .reader-title { max-width: 900px; }
+
+/* Save, loading and unavailable content should read as status, not decoration. */
+.editor-save-status.saving { color: #a36f16; }
+.editor-save-status.offline { color: #a36f16; border-color: rgba(163, 111, 22, .24); background: rgba(163, 111, 22, .06); }
+.editor-save-status.error { color: #b94242; border-color: rgba(185, 66, 66, .24); background: rgba(185, 66, 66, .06); }
+.editor-save-status.saved, .editor-save-status.synced { color: var(--nz-accent); }
+html[data-theme="dark"] .editor-save-status.saving,
+html[data-theme="dark"] .editor-save-status.offline { color: #e5bc69; }
+html[data-theme="dark"] .editor-save-status.error { color: #f0a2a2; }
+html[data-theme="dark"] .reader-paper { box-shadow: var(--note-shadow); }
+
+/* Reduced motion applies to the new sticky/hover surfaces as well. */
+@media (prefers-reduced-motion: reduce) {
+  .reader-tool, .editor-save-status, .editor-mode-tab { transition: none !important; }
+}
+@media (max-width: 680px) {
+  .app-shell.focus-mode .note-view:not(.pdf-attachment-reading) .reader-paper { padding: 34px 22px 50px; }
+}
+@media (max-width: 420px) {
+  .app-shell.focus-mode .note-view:not(.pdf-attachment-reading) .reader-paper { padding: 31px 17px 44px; }
+}

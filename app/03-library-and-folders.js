@@ -609,8 +609,15 @@ async function loadPdfReader(state) {
     }
     function setEditorMode(mode) {
       editorPreviewMode = mode === 'preview';
+      const tabs = $('.editor-mode-tabs');
+      if (tabs) tabs.setAttribute('role', 'tablist');
+      [$('#editor-write-tab'), $('#editor-preview-tab')].forEach(tab => { if (tab) tab.setAttribute('role', 'tab'); });
+      $('#editor-write-tab').setAttribute('aria-controls', 'note-body-input');
+      $('#editor-preview-tab').setAttribute('aria-controls', 'editor-preview');
       $('#editor-write-tab').classList.toggle('active', !editorPreviewMode);
       $('#editor-preview-tab').classList.toggle('active', editorPreviewMode);
+      $('#editor-write-tab').setAttribute('aria-selected', String(!editorPreviewMode));
+      $('#editor-preview-tab').setAttribute('aria-selected', String(editorPreviewMode));
       $('#note-body-input').classList.toggle('hidden', editorPreviewMode);
       $('#editor-preview').classList.toggle('hidden', !editorPreviewMode);
       $('#markdown-toolbar').classList.toggle('hidden', editorPreviewMode || !['note','markdown'].includes(editorKind));

@@ -310,6 +310,7 @@ function noteRowMarkup(note, dateMode = 'updated') {
       const list = currentPage === 'notes';
       const reader = currentPage === 'reader' && Boolean(current);
       const editor = currentPage === 'editor';
+      $('#app-shell').classList.toggle('note-workspace-mode', reader || editor);
       if (studySession && (!reader || !studySession.ids.includes(current?.id))) finishStudySession(false);
       if (!reader) setReviewPopover(false);
       $('#home-view').classList.toggle('hidden', !home);
@@ -628,7 +629,7 @@ function noteRowMarkup(note, dateMode = 'updated') {
         const overlay = document.createElement('div');
         overlay.className = 'nz-modal-overlay';
         overlay.innerHTML = `<div class="nz-modal fp-modal" role="dialog" aria-modal="true" aria-labelledby="fp-title">
-          <div class="nz-modal-head"><span class="nz-modal-icon" aria-hidden="true">📁</span><h3 id="fp-title">${esc(title)}</h3></div>
+          <div class="nz-modal-head"><span class="nz-modal-icon" aria-hidden="true">${svgIcon('folder',18)}</span><h3 id="fp-title">${esc(title)}</h3></div>
           <p class="nz-modal-msg">${esc(message)}</p>
           <input class="nz-modal-input" id="fp-search" type="search" placeholder="Search folders, or type a new name" aria-label="Search folders" autocomplete="off">
           <div class="fp-list" id="fp-list" role="listbox" aria-label="Folders"></div>
@@ -643,7 +644,7 @@ function noteRowMarkup(note, dateMode = 'updated') {
           const q = search.value.trim().toLowerCase();
           const shown = q ? allPaths.filter(path => path.toLowerCase().includes(q)) : allPaths;
           const items = [{ path: '', label: 'General (root)', depth: 0 }, ...shown.map(path => ({ path, label: path.split('/').pop(), depth: path.split('/').length - 1, full: path }))];
-          let html = items.map(item => `<button type="button" role="option" class="fp-row ${selected === item.path ? 'on' : ''}" style="padding-left:${12 + item.depth * 16}px" data-path="${esc(item.path)}" aria-selected="${selected === item.path}"><span class="fp-ico">${item.path ? '📁' : '🗂'}</span><span class="fp-name">${esc(item.label)}</span><small>${item.path ? count(item.path) : ''}</small></button>`).join('');
+          let html = items.map(item => `<button type="button" role="option" class="fp-row ${selected === item.path ? 'on' : ''}" style="padding-left:${12 + item.depth * 16}px" data-path="${esc(item.path)}" aria-selected="${selected === item.path}"><span class="fp-ico">${svgIcon('folder',16)}</span><span class="fp-name">${esc(item.label)}</span><small>${item.path ? count(item.path) : ''}</small></button>`).join('');
           const typed = cleanFolderPath(search.value);
           if (typed && !allPaths.includes(typed)) html = `<button type="button" role="option" class="fp-row fp-create ${selected === typed ? 'on' : ''}" data-path="${esc(typed)}"><span class="fp-ico">＋</span><span class="fp-name">Create “${esc(typed)}”</span></button>` + html;
           list.innerHTML = html || '<div class="fp-empty">No folders match. Type a name to create one.</div>';

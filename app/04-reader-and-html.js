@@ -1,4 +1,30 @@
 $('#focus-exit-button').addEventListener('click', toggleFocus);
+    function polishAccountMenuIcons() {
+      const standard = { '#insights-menu': 'list', '#trash-menu': 'trash', '#install-menu': 'download' };
+      Object.entries(standard).forEach(([selector, name]) => {
+        const slot = document.querySelector(`${selector} > span:first-child`);
+        if (slot) { slot.innerHTML = svgIcon(name, 16); slot.setAttribute('aria-hidden', 'true'); }
+      });
+      const custom = {
+        '#ai-menu': '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 13.7 9l5.8 3-5.8 3-1.7 5.5-1.7-5.5-5.8-3 5.8-3L12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+        '#record-menu': '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+        '#settings-hub-menu': '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.5"/></svg>'
+      };
+      Object.entries(custom).forEach(([selector, markup]) => {
+        const slot = document.querySelector(`${selector} > span:first-child`);
+        if (slot) { slot.innerHTML = markup; slot.setAttribute('aria-hidden', 'true'); }
+      });
+      const toolbarIcons = {
+        quote: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 11h5v6H6a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Zm8 0h5v6h-5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2ZM7 11V8.5A2.5 2.5 0 0 1 9.5 6M15 11V8.5A2.5 2.5 0 0 1 17.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        bullet: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="7" r="1.3" fill="currentColor"/><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="5" cy="17" r="1.3" fill="currentColor"/><path d="M10 7h9M10 12h9M10 17h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+        numbered: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 6.5h1v4M4.5 6.5h1.3M4.5 10.5h2M4.5 14.5c.4-.5 2-.4 2 .7 0 1.1-2 1.2-2 2.3h2M10 7h9M10 12h9M10 17h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        checklist: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="m5.5 6.5 1 1 1.8-2M12 6.5h8M4 15h5M12 15h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        code: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        link: '<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 13.5 4-4M8.5 16.5l-1.2 1.2a3.2 3.2 0 0 1-4.5-4.5l3-3a3.2 3.2 0 0 1 4.5 0M15.5 7.5l1.2-1.2a3.2 3.2 0 0 1 4.5 4.5l-3 3a3.2 3.2 0 0 1-4.5 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      };
+      Object.entries(toolbarIcons).forEach(([name, markup]) => { const button = document.querySelector(`[data-markdown-format="${name}"]`); if (button) button.innerHTML = markup; });
+    }
+    polishAccountMenuIcons();
     $('#download-current').addEventListener('click', () => downloadNote());
     $('#reader-outline-toggle').addEventListener('click', () => {
       const list = $('#reader-outline-list');
@@ -745,6 +771,14 @@ $('#focus-exit-button').addEventListener('click', toggleFocus);
     // ================= NotezAi docked panel with chat history =================
     const NZAI_CHAT_KEY = () => 'notez-ai-chats-v2-' + (currentSession?.mode === 'cloud' ? currentSession.user.uid : 'demo');
     const nzai = { open: false, view: 'chat', chatId: '', scope: 'note', noteId: '', busy: false, tab: 'gemini', notice: '', quiz: '', moreOpen: false };
+    function nzaiSyncTriggerState(open) {
+      const trigger = $('#reader-ai');
+      if (trigger) { trigger.setAttribute('aria-expanded', String(Boolean(open))); trigger.classList.toggle('is-active', Boolean(open)); }
+      const fab = document.querySelector('#nzai-fab');
+      if (fab) fab.setAttribute('aria-expanded', String(Boolean(open)));
+      const panel = $('#nz-ai');
+      if (panel) panel.setAttribute('aria-hidden', String(!open));
+    }
     function nzaiReadChats() { try { const list = JSON.parse(localStorage.getItem(NZAI_CHAT_KEY())); return Array.isArray(list) ? list : []; } catch { return []; } }
     function nzaiWriteChats(list) {
       const trimmed = list.slice(0, 50).map(chat => ({ ...chat, messages: (chat.messages || []).slice(-100) }));
@@ -785,9 +819,9 @@ $('#focus-exit-button').addEventListener('click', toggleFocus);
     }
     function nzaiEnsurePanel() {
       let panel = $('#nz-ai');
-      if (panel) return panel;
+      if (panel) { panel.setAttribute('role', 'complementary'); panel.setAttribute('aria-hidden', String(!nzai.open)); return panel; }
       panel = document.createElement('aside');
-      panel.id = 'nz-ai'; panel.setAttribute('aria-label', 'NotezAi and voice notes'); panel.hidden = true;
+      panel.id = 'nz-ai'; panel.setAttribute('role', 'complementary'); panel.setAttribute('aria-label', 'NotezAi and voice notes'); panel.setAttribute('aria-hidden', 'true'); panel.hidden = true;
       panel.innerHTML = `<div class="dock-grab" aria-hidden="true"></div>
         <nav class="ai-mobile-sidebar" aria-label="AI workspace">
           <div class="ai-mobile-brand" aria-hidden="true">N</div>
@@ -858,6 +892,7 @@ $('#focus-exit-button').addEventListener('click', toggleFocus);
       const panel = nzaiEnsurePanel();
       nzai.open = true; nzai.dock = tab; panel.hidden = false;
       document.documentElement.classList.add('nzai-open');
+      nzaiSyncTriggerState(true);
       panel.querySelectorAll('[data-dock]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.dock === tab)));
       panel.querySelector('#pane-ai').hidden = tab !== 'ai';
       panel.querySelector('#pane-voice').hidden = tab !== 'voice';
@@ -871,7 +906,7 @@ $('#focus-exit-button').addEventListener('click', toggleFocus);
       dockShow('ai');
       if (preset && aiReady()) setTimeout(() => nzaiQuick(preset), 60);
     }
-    function nzaiClose() { const panel = $('#nz-ai'); if (panel) panel.hidden = true; nzai.open = false; document.documentElement.classList.remove('nzai-open'); }
+    function nzaiClose() { const panel = $('#nz-ai'); if (panel) panel.hidden = true; nzai.open = false; document.documentElement.classList.remove('nzai-open'); nzaiSyncTriggerState(false); }
     function nzaiRender() {
       const panel = nzaiEnsurePanel(), body = $('#nzai-body');
       nzaiSyncChrome();

@@ -4,7 +4,7 @@ function openNotezAi(note = null, preset = '') {
     }
     const nzaiFab = document.createElement('button');
     nzaiFab.id = 'nzai-fab'; nzaiFab.type = 'button';
-    nzaiFab.setAttribute('aria-label', 'Open NotezAi'); nzaiFab.title = 'NotezAi · chat, notes and voice recording';
+    nzaiFab.setAttribute('aria-label', 'Open NotezAi'); nzaiFab.setAttribute('aria-controls', 'nz-ai'); nzaiFab.setAttribute('aria-expanded', 'false'); nzaiFab.title = 'NotezAi · chat, notes and voice recording';
     nzaiFab.innerHTML = '<span class="nzai-fab-logo" aria-hidden="true"></span>';
     document.body.appendChild(nzaiFab);
     nzaiFab.addEventListener('click', () => { if (nzai.open) nzaiClose(); else openNotezAi(currentPage === 'reader' ? notes.find(item => item.id === activeId) || null : null); });
@@ -141,7 +141,7 @@ function openNotezAi(note = null, preset = '') {
         const name = path.split('/').pop(), previous = document.activeElement;
         const overlay = document.createElement('div');
         overlay.className = 'nz-modal-overlay';
-        const rows = items.map(item => `<li class="fd-row"><label><input type="checkbox" data-keep="${esc(item.key)}" aria-label="Keep ${esc(item.label)}"><span class="fd-kind">${item.kind === 'folder' ? '📁' : '📄'}</span><span class="fd-name">${esc(item.label)}</span><small>${esc(item.meta)}</small></label></li>`).join('');
+        const rows = items.map(item => `<li class="fd-row"><label><input type="checkbox" data-keep="${esc(item.key)}" aria-label="Keep ${esc(item.label)}"><span class="fd-kind">${item.kind === 'folder' ? svgIcon('folder',14) : svgIcon('file',14)}</span><span class="fd-name">${esc(item.label)}</span><small>${esc(item.meta)}</small></label></li>`).join('');
         overlay.innerHTML = `<div class="nz-modal fd-modal" role="alertdialog" aria-modal="true" aria-labelledby="fd-title">
           <div class="nz-modal-head"><span class="nz-modal-icon danger" aria-hidden="true">!</span><h3 id="fd-title">Delete “${esc(name)}”?</h3></div>
           <p class="nz-modal-msg">This removes the folder with ${notesCount} note${notesCount === 1 ? '' : 's'}${subCount ? ` and ${subCount} subfolder${subCount === 1 ? '' : 's'}` : ''}. Tick anything you want to keep. Kept items move to ${keepTarget === 'General' ? '“General”' : `“${esc(keepTarget)}”`}.</p>
