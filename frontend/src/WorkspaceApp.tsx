@@ -187,6 +187,44 @@ function GoogleMark() {
   </svg>;
 }
 
+function SidebarShortcuts({ notes, onOpen }: { notes: Note[]; onOpen: (noteId: string) => void }) {
+  const { t } = useTranslation();
+  const favoriteNoteIds = useUiStore((state) => state.favoriteNoteIds);
+  const live = notes.filter((note) => !note.deleted_at);
+  const byId = new Map(live.map((note) => [note.id, note]));
+  const favorites = favoriteNoteIds.map((id) => byId.get(id)).filter((note): note is Note => Boolean(note)).slice(0, 6);
+  const recent = [...live]
+    .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
+    .slice(0, 6);
+
+  const row = (note: Note) => (
+    <button key={note.id} type="button" className="workspace-shortcut-item" onClick={() => onOpen(note.id)} title={note.title || undefined}>
+      <span className="workspace-shortcut-glyph" aria-hidden="true">{(note.title || "•").slice(0, 1).toUpperCase()}</span>
+      <span className="workspace-shortcut-copy">
+        <span className="workspace-shortcut-title">{note.title || t("library.untitled", { defaultValue: "Untitled" })}</span>
+        {note.folder_path && <small>{note.folder_path}</small>}
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="workspace-shortcuts">
+      {favorites.length > 0 && (
+        <section aria-label={t("nav.favorites", { defaultValue: "Favorites" })}>
+          <h3 className="workspace-shortcuts-heading">{t("nav.favorites", { defaultValue: "Favorites" })}</h3>
+          <div className="workspace-shortcut-list">{favorites.map(row)}</div>
+        </section>
+      )}
+      {recent.length > 0 && (
+        <section aria-label={t("nav.recent", { defaultValue: "Recent" })}>
+          <h3 className="workspace-shortcuts-heading">{t("nav.recent", { defaultValue: "Recent" })}</h3>
+          <div className="workspace-shortcut-list">{recent.map(row)}</div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function FolderList({ notes, selected, onSelect, onDrop }: {
   notes: Note[];
   selected: string;
@@ -743,7 +781,7 @@ export default function WorkspaceApp() {
               if (dragged) updateFolder.mutate({ note: dragged, folder });
             }}
           />
-          <div className="workspace-sidebar-spacer" />
+          <SidebarShortcuts notes={allNotes} onOpen={(id) => { setMobileMenuOpen(false); navigate(`/notes/${id}`); }} />
           <div className="workspace-sidebar-footer">
             <span className="workspace-avatar">{(user.displayName ?? user.email ?? "G").slice(0, 1).toUpperCase()}</span>
             <span className="workspace-user-copy"><strong>{user.displayName ?? (user.isAnonymous ? t("common.guest") : user.email)}</strong><small>{user.isAnonymous ? t("common.guestWorkspace") : t("common.private")}</small></span>

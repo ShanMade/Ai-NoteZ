@@ -477,3 +477,54 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace-app *, .workspace-app *::before, .workspace-app *::after { transition: none !important; animation: none !important; }
 }
+
+/* ---------- Sidebar: denser, Notion-style structure ---------- */
+.workspace-sidebar { gap: 2px; }
+.workspace-sidebar-heading { margin-bottom: 6px; min-height: 26px; }
+.workspace-sidebar-heading span { font: 600 11px var(--font-body), "DM Sans", sans-serif; color: var(--text-muted); letter-spacing: 0.01em; }
+.workspace-sidebar-heading .workspace-icon-button { min-width: 24px; min-height: 24px; width: 24px; height: 24px; }
+.workspace-folders { margin-bottom: 14px; }
+
+.workspace-shortcuts { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
+.workspace-shortcuts-heading {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font: 600 11px var(--font-body), "DM Sans", sans-serif;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.workspace-shortcut-list { display: flex; flex-direction: column; gap: 1px; }
+.workspace-shortcut-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--notion-radius, 6px);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: start;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.workspace-shortcut-item:hover { background: var(--notion-hover, var(--surface-hover)); color: var(--text-primary); }
+.workspace-shortcut-glyph {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 700 11px var(--font-body), "DM Sans", sans-serif;
+}
+.workspace-shortcut-copy { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.workspace-shortcut-title { overflow: hidden; color: inherit; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-shortcut-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Footer stays pinned to the bottom, without a flexible gap above it */
+.workspace-sidebar-footer { margin-top: auto; padding: 12px 8px 4px; }
+.workspace-sidebar-spacer { display: none; }
