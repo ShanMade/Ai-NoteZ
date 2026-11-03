@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, CloudOff, Headphones, Radio, RotateCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, CloudOff, Copy, FileText, Headphones, Radio, RotateCw, ShieldCheck, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { fetchPart, fetchSession, fetchSpeakers, manualRetryPart, renameSpeaker, type AccessTokenProvider } from "../recorder/api";
 import { BrowserRecorder, type RecorderSnapshot } from "../recorder/engine";
@@ -53,6 +53,7 @@ export default function Record({
   const [remoteStatus, setRemoteStatus] = useState("");
   const [retryingPart, setRetryingPart] = useState<number | null>(null);
   const [pageError, setPageError] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
   const engineRef = useRef<BrowserRecorder>();
   const navigate = useNavigate();
   const accessToken = useAccessToken(getAccessToken);
@@ -167,6 +168,43 @@ export default function Record({
     }
   };
 
+  const handleCopyTranscript = async () => {
+    if (!transcript.length) return;
+    const text = transcript
+      .map((seg) => {
+        const spk = speakers.find((item) => item.id === seg.speaker_id);
+        const name = spk?.display_name ?? seg.display_name ?? "Speaker";
+        const role = spk?.role ? ` (${spk.role})` : "";
+        return `${name}${role}: ${seg.text}`;
+      })
+      .join("\n\n");
+    await navigator.clipboard.writeText(text);
+    setCopyNotice("Copied full transcript to clipboard!");
+    window.setTimeout(() => setCopyNotice(""), 3000);
+  };
+
+  const handleDownloadTranscript = () => {
+    if (!transcript.length) return;
+    const md = [
+      `# Recording Transcript`,
+      `*Exported on ${new Date().toLocaleString()}*\n`,
+      transcript
+        .map((seg) => {
+          const spk = speakers.find((item) => item.id === seg.speaker_id);
+          const name = spk?.display_name ?? seg.display_name ?? "Speaker";
+          return `**${name}**: ${seg.text}`;
+        })
+        .join("\n\n"),
+    ].join("\n");
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recording-${noteId || "transcript"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="record-page">
       <header className="record-page-header">
@@ -237,6 +275,27 @@ export default function Record({
               onResume={() => engineRef.current?.resumeCapture()}
               onFinish={() => void engineRef.current?.stopAndFinish()}
             />
+
+            {(remoteStatus === "done" || snapshot.state === "finished" || transcript.length > 0) && (
+              <section className="record-actions-card">
+                <div className="record-actions-header">
+                  <span className="record-actions-title"><Sparkles size={14} /> Transcript Studio</span>
+                  {copyNotice && <span className="record-actions-toast"><Check size={12} /> {copyNotice}</span>}
+                </div>
+                <div className="record-actions-buttons">
+                  <button type="button" className="record-button" onClick={() => navigate(-1)}>
+                    <ArrowLeft size={13} /> Back to note
+                  </button>
+                  <button type="button" className="record-button record-button-primary" onClick={handleCopyTranscript} disabled={!transcript.length}>
+                    <Copy size={13} /> Copy transcript
+                  </button>
+                  <button type="button" className="record-button" onClick={handleDownloadTranscript} disabled={!transcript.length}>
+                    <FileText size={13} /> Export .md
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section className="record-speakers-panel">
               <header className="record-section-header">
                 <div><p className="record-eyebrow">A FEW VOICES, ONE STORY</p><h2>In this room</h2></div>
@@ -253,6 +312,7 @@ export default function Record({
               speakers={speakers}
               waiting={waitingForSpeech}
               sessionActive={sessionActive}
+              onCopy={handleCopyTranscript}
             />
             {!!snapshot.jobs.length && (
               <section className="record-parts-panel">

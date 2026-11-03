@@ -245,15 +245,100 @@ async function openWikiLink(title) {
     const REC_SEGMENT_MS = () => window.__REC_SEGMENT_MS || 30000;   // each part is transcribed as soon as it is recorded
     const REC_NOTES_EVERY = 2;                                        // refresh the AI notes every 2 parts
     const REC_MAX_MS = 50 * 60 * 1000;
-    const REC = { stream: null, recorder: null, mime: 'audio/webm', mode: 'class', dialog: null, timer: 0, segTimer: 0,
-      status: 'idle', startedAt: 0, pausedMs: 0, pausedAt: 0, chunks: [], segIdx: 0, segTexts: [], queue: Promise.resolve(),
-      noteId: '', provider: '', failovers: 0, notice: '', liveNotes: '', processed: 0, lastNotesAt: 0, busy: false, errors: 0 };
+    const REC = {
+      stream: null, recorder: null, mime: 'audio/webm', mode: 'class', dialog: null, timer: 0, segTimer: 0,
+      status: 'idle', startedAt: 0, pausedMs: 0, pausedAt: 0, chunks: [], allAudioBlobs: [], audioUrl: null, audioBlob: null,
+      audioEl: null, isPlaying: false, playRate: 1,
+      segIdx: 0, segTexts: [], queue: Promise.resolve(),
+      noteId: '', provider: '', failovers: 0, notice: '', liveNotes: '', processed: 0, lastNotesAt: 0, busy: false, errors: 0,
+      speechRec: null, interimText: '', liveSpeechTurns: [],
+      studioOutput: '', studioMode: 'class', studioBusy: false
+    };
     const recMime = () => ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || 'audio/webm';
     const recElapsed = () => Math.max(0, (REC.status === 'paused' ? REC.pausedAt : Date.now()) - REC.startedAt - REC.pausedMs);
     const fmtClock = ms => { const sec = Math.floor(ms / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60; return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
     const recTransient = error => error?.status === 429 || error?.status >= 500 || error instanceof TypeError || error?.name === 'AbortError' || error?.code === 'cut';
     const recLabel = provider => provider === 'gemini' ? 'Gemini' : 'Groq';
     const recSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Audio cue synthesizer for tactile audio feedback
+    function recChime(kind = 'start') {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        if (kind === 'start') {
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+        } else if (kind === 'pause') {
+          osc.frequency.setValueAtTime(660, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        } else {
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(520, ctx.currentTime + 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
+        }
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.26);
+        setTimeout(() => ctx.close().catch(() => {}), 350);
+      } catch {}
+    }
+
+    // Real-time speech-to-text streaming via browser Web Speech API
+    function startLiveSpeechRec() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      try {
+        const sr = new SR();
+        sr.continuous = true;
+        sr.interimResults = true;
+        sr.maxAlternatives = 1;
+        sr.lang = (document.documentElement.lang === 'ur' ? 'ur-PK' : document.documentElement.lang === 'hi' ? 'hi-IN' : 'en-US');
+        sr.onresult = event => {
+          let interim = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              const text = res[0].transcript.trim();
+              if (text) {
+                const time = fmtClock(recElapsed());
+                REC.liveSpeechTurns.push({ time, text, speaker: 'Voice 1' });
+                REC.interimText = '';
+                updateRecLive();
+              }
+            } else {
+              interim += res[0].transcript;
+            }
+          }
+          REC.interimText = interim;
+          const interimEl = $('#rec-interim-text');
+          if (interimEl) {
+            interimEl.textContent = interim ? `“${interim}”` : '';
+            interimEl.closest('.rec-live-interim')?.classList.toggle('active', Boolean(interim));
+          }
+        };
+        sr.onerror = e => { if (e.error !== 'no-speech') console.warn('Live SpeechRec error:', e.error); };
+        sr.onend = () => { if (REC.status === 'recording') { try { sr.start(); } catch {} } };
+        sr.start();
+        REC.speechRec = sr;
+      } catch (err) { console.warn('Live SpeechRec could not start:', err); }
+    }
+    function stopLiveSpeechRec() {
+      if (REC.speechRec) {
+        try { REC.speechRec.stop(); } catch {}
+        REC.speechRec = null;
+      }
+      REC.interimText = '';
+    }
 
     // Runs the steps in order. A step that fails (network cut, rate limit, server error, cut-off reply) hands over to the next one.
     async function recFailover(steps, tag) {
@@ -306,7 +391,14 @@ One turn per line, in the form "Voice N: words", with a timestamp like [05:12] a
 Transcribe the words exactly as spoken, in their original language (English, Urdu or others). Do not translate. Write [inaudible] for anything you cannot hear.
 Output only the transcript.`;
     function recKnownVoices() { return recDetectVoices(REC.segTexts.join('\n')).join(', '); }
-    function recLiveTranscript() { return REC.segTexts.filter(Boolean).join('\n'); }
+    function recLiveTranscript() {
+      const segs = REC.segTexts.filter(Boolean);
+      if (segs.length > 0) return segs.join('\n');
+      if (REC.liveSpeechTurns && REC.liveSpeechTurns.length > 0) {
+        return REC.liveSpeechTurns.map(t => `[${t.time}] ${t.speaker}: ${t.text}`).join('\n');
+      }
+      return '';
+    }
     function recNoteBody(transcript, notesText, finishing) {
       const when = new Date(REC.startedAt);
       const providerLine = REC.provider ? `${recLabel(REC.provider)}` : 'AI';
@@ -348,7 +440,7 @@ Output only the transcript.`;
     }
     function enqueuePart(blob, index) {
       REC.queue = REC.queue.then(async () => {
-        if (!blob || blob.size < 500) { REC.processed++; return; }   // a tiny fragment at the end is not speech
+        if (!blob || blob.size < 500) { REC.processed++; return; }
         try {
           const text = recCleanPart(await recTranscribePart(blob, index));
           if (!text) REC.notice = `Part ${index + 1} had no clear speech. Check the microphone and the room noise.`;
@@ -370,7 +462,12 @@ Output only the transcript.`;
       const recorder = new MediaRecorder(REC.stream, { mimeType: REC.mime, audioBitsPerSecond: 32000 });
       const index = REC.segIdx++;
       recorder.ondataavailable = event => { if (event.data?.size) REC.chunks.push(event.data); };
-      recorder.onstop = () => { const blob = new Blob(REC.chunks, { type: REC.mime.split(';')[0] }); REC.chunks = []; enqueuePart(blob, index); };
+      recorder.onstop = () => {
+        const blob = new Blob(REC.chunks, { type: REC.mime.split(';')[0] });
+        if (blob.size > 0) REC.allAudioBlobs.push(blob);
+        REC.chunks = [];
+        enqueuePart(blob, index);
+      };
       recorder.start();
       REC.recorder = recorder;
       REC.expectedParts = index + 1;
@@ -390,21 +487,36 @@ Output only the transcript.`;
       if (!currentSession) return;
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('This browser cannot record audio. Use Chrome or Edge on https.', 'error', 6000); return; }
       if (!recProviders().length) { toast('Add a Gemini or Groq key in NotezAi settings. Recording needs one to make notes.', 'error', 6000); return; }
-      if (REC.status === 'done') { REC.status = 'idle'; REC.segTexts = []; REC.segIdx = 0; REC.processed = 0; REC.failovers = 0; REC.liveNotes = ''; REC.provider = ''; REC.failedOn = new Set(); REC.notice = ''; REC.errors = 0; REC.queue = Promise.resolve(); }
+      if (REC.status === 'done') {
+        REC.status = 'idle'; REC.segTexts = []; REC.segIdx = 0; REC.processed = 0; REC.failovers = 0;
+        REC.liveNotes = ''; REC.provider = ''; REC.failedOn = new Set(); REC.notice = ''; REC.errors = 0;
+        REC.queue = Promise.resolve(); REC.allAudioBlobs = []; REC.audioBlob = null; REC.audioUrl = null;
+        REC.liveSpeechTurns = []; REC.interimText = ''; REC.studioOutput = '';
+      }
       REC.dialog = { set hidden(value) { if (value) nzaiClose(); else dockShow('voice'); }, get hidden() { return !nzai.open || nzai.dock !== 'voice'; } };
       dockShow('voice');
     }
     const REC_VOICE_CLASS = ['voice-a', 'voice-b', 'voice-c', 'voice-d'];
     function recTimeline() {
       const parts = REC.segTexts.map((text, index) => ({ index, text: text || '' })).filter(part => part.text.trim());
-      if (!parts.length) return `<div class="rec-empty">${REC.status === 'idle' ? 'The live transcript appears here as you record.' : 'Listening… the first part appears within about 30 seconds.'}</div>`;
+      if (!parts.length) {
+        if (REC.liveSpeechTurns && REC.liveSpeechTurns.length > 0) {
+          const lines = REC.liveSpeechTurns.map(t =>
+            `<p class="rec-line"><span class="rec-stamp">${esc(t.time)}</span><button type="button" class="rec-speaker-badge voice-a" data-rec="rename-speaker" data-voice="${esc(t.speaker)}" title="Click to rename">${esc(t.speaker)} ✎</button><span class="rec-text">${esc(t.text)}</span></p>`
+          ).join('');
+          return `<section class="rec-part current"><header><b>Live Stream</b><span>${fmtClock(recElapsed())}</span></header>${lines}</section>`;
+        }
+        return `<div class="rec-empty">${REC.status === 'idle' ? 'The live transcript appears here as you record.' : 'Listening… your words will appear here in real time.'}</div>`;
+      }
       const lastIndex = parts[parts.length - 1].index;
       return parts.map(part => {
         const lines = part.text.split('\n').filter(line => line.trim()).map(line => {
-          const m = line.match(/^\s*(?:\[([\d:]+)\]\s*)?\**\s*(Voice\s+(\d+))\s*\**\s*:\s*(.*)$/i);
+          const m = line.match(/^\s*(?:\[([\d:]+)\]\s*)?\**\s*(Voice\s+(\d+)|[^:]+?)\s*\**\s*:\s*(.*)$/i);
           if (!m) return `<p class="rec-line"><span class="rec-text">${esc(line.trim())}</span></p>`;
-          const n = Number(m[3]) - 1;
-          return `<p class="rec-line"><span class="rec-stamp">${esc(m[1] || '')}</span><span class="rec-speaker ${REC_VOICE_CLASS[n % 4]}">Voice ${m[3]}</span><span class="rec-text">${esc(m[4])}</span></p>`;
+          const speakerName = m[2];
+          const num = Number(m[3] || 1) - 1;
+          const cls = REC_VOICE_CLASS[Math.abs(num) % 4];
+          return `<p class="rec-line"><span class="rec-stamp">${esc(m[1] || '')}</span><button type="button" class="rec-speaker-badge ${cls}" data-rec="rename-speaker" data-voice="${esc(speakerName)}" title="Click to rename">${esc(speakerName)} ✎</button><span class="rec-text">${esc(m[3] ? m[4] : m[3])}</span></p>`;
         }).join('');
         return `<section class="rec-part${part.index === lastIndex && REC.status === 'recording' ? ' current' : ''}"><header><b>Part ${part.index + 1}</b><span>${(part.index + 1) * Math.round(REC_SEGMENT_MS() / 1000)}s</span></header>${lines}</section>`;
       }).join('');
@@ -423,8 +535,9 @@ Output only the transcript.`;
       const notice = REC.notice ? `<div class="ai-notice rec-notice" role="status">${esc(REC.notice)}</div>` : '';
       if (REC.status === 'idle') return `<div class="rec-strip">${recProviderStrip()}</div>${notice}`;
       const tab = REC.tab === 'notes' ? 'notes' : 'transcript';
-      const tabs = `<div class="rec-tabs" role="tablist" aria-label="Live view"><button type="button" role="tab" aria-selected="${tab === 'transcript'}" data-rec="tab" data-tab="transcript">Transcript<small>${pending ? `${pending} in progress` : REC.processed ? 'Up to date' : 'Listening'}</small></button><button type="button" role="tab" aria-selected="${tab === 'notes'}" data-rec="tab" data-tab="notes">Notes<small>${REC.failovers ? `${REC.failovers} switch${REC.failovers === 1 ? '' : 'es'}` : 'Live'}</small></button></div>`;
-      const pane = tab === 'transcript' ? `<div class="rec-scroll" id="rec-transcript">${recTimeline()}</div>` : `<div class="rec-scroll ai-md">${notes}</div>`;
+      const tabs = `<div class="rec-tabs" role="tablist" aria-label="Live view"><button type="button" role="tab" aria-selected="${tab === 'transcript'}" data-rec="tab" data-tab="transcript">Transcript<small>${pending ? `${pending} in progress` : REC.processed ? 'Up to date' : 'Live'}</small></button><button type="button" role="tab" aria-selected="${tab === 'notes'}" data-rec="tab" data-tab="notes">Notes<small>${REC.failovers ? `${REC.failovers} switch${REC.failovers === 1 ? '' : 'es'}` : 'Live'}</small></button></div>`;
+      const interimBanner = REC.status === 'recording' ? `<div class="rec-live-interim ${REC.interimText ? 'active' : ''}"><span class="rec-interim-pulse"><i></i> Live Voice</span><p id="rec-interim-text">${REC.interimText ? esc(REC.interimText) : 'Listening to your speech in real time…'}</p></div>` : '';
+      const pane = tab === 'transcript' ? `<div class="rec-scroll" id="rec-transcript">${interimBanner}${recTimeline()}</div>` : `<div class="rec-scroll ai-md">${notes}</div>`;
       return `<div class="rec-strip">${recProviderStrip()}</div>${notice}${tabs}<section class="rec-card">${pane}</section>`;
     }
     function updateRecLive() { const el = $('#rec-live'); if (el) el.innerHTML = recLiveHtml(); }
@@ -434,33 +547,123 @@ Output only the transcript.`;
       const ic = d => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</g></svg>`;
       const clock = `<span class="rec-clock" id="rec-clock">${fmtClock(recElapsed())}</span>`;
       const modeSeg = status === 'idle' ? `<div class="ai-seg rec-mode" role="radiogroup" aria-label="Recording type">${[['class', 'Classroom'], ['meeting', 'Meeting']].map(([v, l]) => `<label class="rec-opt"><input type="radio" name="rec-mode" id="rec-mode-${v}" value="${v}" ${REC.mode === v ? 'checked' : ''}>${l}</label>`).join('')}</div>` : '';
-      const intro = status === 'idle' ? `<p class="rec-sub">Record a lecture or meeting. You get a live transcript with speakers, and notes written as you go.</p>${modeSeg}` : '';
+      const intro = status === 'idle' ? `<p class="rec-sub">Record a lecture or meeting. You get real-time speech streaming, live animated waveform, and structured study notes.</p>${modeSeg}` : '';
       const stage = (() => {
-        if (status === 'idle') return `<div class="rec-stage idle"><button type="button" class="rec-rec" data-rec="start" aria-label="Start recording"><i></i></button><div class="rec-stage-t"><b>Start recording</b><small>Saved to your library from the first second</small></div></div>`;
-        const meter = status === 'recording' ? `<div class="rec-meter" aria-hidden="true"><i id="rec-level" style="width:0%"></i></div>` : '';
+        if (status === 'idle') return `<div class="rec-stage idle"><button type="button" class="rec-rec" data-rec="start" aria-label="Start recording"><i></i></button><div class="rec-stage-t"><b>Start recording</b><small>Saved to your library with real-time speech feedback</small></div></div>`;
+        const canvasWave = `<div class="rec-waveform-shell"><canvas id="rec-canvas-waveform" width="320" height="52" class="rec-canvas-waveform" aria-hidden="true"></canvas></div>`;
         const mid = status === 'paused' ? `<button type="button" class="rec-ctl" data-rec="resume">${ic('<path d="M7 4l13 8-13 8Z"/>')}<span>Resume</span></button>` : status === 'recording' ? `<button type="button" class="rec-ctl" data-rec="pause">${ic('<path d="M8 5v14M16 5v14"/>')}<span>Pause</span></button>` : '';
         const ctl = status === 'recording' || status === 'paused' ? `<div class="rec-ctls">${mid}<button type="button" class="rec-ctl stop" data-rec="stop">${ic('<rect x="6" y="6" width="12" height="12" rx="2"/>')}<span>Stop and finish</span></button><button type="button" class="rec-ctl quiet" data-rec="close" aria-label="Hide panel while recording continues" title="Hide panel (recording continues)">${ic('<path d="m6 9 6 6 6-6"/>')}</button></div>` : '';
-        return `<div class="rec-stage ${status}"><div class="rec-state ${status}"><i></i><b>${stateLabel}</b></div>${status === 'done' ? '' : clock}${meter}${ctl}</div>`;
+        return `<div class="rec-stage ${status}"><div class="rec-state ${status}"><i></i><b>${stateLabel}</b></div>${status === 'done' ? '' : clock}${canvasWave}${ctl}</div>`;
       })();
+
+      const audioPlayerCard = (status === 'done' && REC.audioUrl) ? `
+        <div class="rec-audio-card" id="rec-audio-player-card">
+          <div class="rec-audio-header">
+            <div class="rec-audio-badge"><i></i> Recording Playback</div>
+            <span class="rec-audio-dur">${fmtClock(recElapsed())}</span>
+          </div>
+          <div class="rec-audio-row">
+            <button type="button" class="rec-audio-play-btn" data-rec="audio-play" aria-label="Play recording">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <div class="rec-audio-timeline">
+              <input type="range" class="rec-audio-scrubber" id="rec-audio-scrubber" min="0" max="100" value="0" step="0.1" aria-label="Audio scrubber">
+              <div class="rec-audio-time-row">
+                <span id="rec-audio-cur-time">0:00</span>
+                <span>${fmtClock(recElapsed())}</span>
+              </div>
+            </div>
+            <div class="rec-audio-speed-chips">
+              <button type="button" class="rec-speed-chip ${REC.playRate === 1 ? 'on' : ''}" data-rec="audio-speed" data-rate="1">1x</button>
+              <button type="button" class="rec-speed-chip ${REC.playRate === 1.25 ? 'on' : ''}" data-rec="audio-speed" data-rate="1.25">1.25x</button>
+              <button type="button" class="rec-speed-chip ${REC.playRate === 1.5 ? 'on' : ''}" data-rec="audio-speed" data-rate="1.5">1.5x</button>
+            </div>
+          </div>
+          <div class="rec-audio-actions">
+            <a href="${REC.audioUrl}" download="Notez-Voice-${new Date().toISOString().slice(0, 10)}.webm" class="rec-audio-dl-link">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0-4-4m4 4 4-4M4 18v2h16v-2"/></svg>
+              Download audio (.webm)
+            </a>
+          </div>
+        </div>
+      ` : '';
+
+      const studioCard = status === 'done' ? `
+        <div class="rec-studio-card">
+          <div class="rec-studio-head">
+            <span class="rec-studio-kicker">✦ AI NOTE STUDIO</span>
+            <h4>Transform into study notes</h4>
+          </div>
+          <div class="rec-studio-modes" role="group" aria-label="AI transformation modes">
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'class' ? 'on' : ''}" data-rec="set-studio" data-mode="class">🎓 Study Notes</button>
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'action' ? 'on' : ''}" data-rec="set-studio" data-mode="action">📋 Action Items</button>
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'flashcards' ? 'on' : ''}" data-rec="set-studio" data-mode="flashcards">🃏 Flashcards</button>
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'summary' ? 'on' : ''}" data-rec="set-studio" data-mode="summary">⚡ Summary</button>
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'clean' ? 'on' : ''}" data-rec="set-studio" data-mode="clean">✍️ Clean Polish</button>
+            <button type="button" class="rec-studio-mode ${REC.studioMode === 'urdu' ? 'on' : ''}" data-rec="set-studio" data-mode="urdu">🌐 اردو (Urdu)</button>
+          </div>
+          <div class="rec-studio-action-row">
+            <button type="button" class="ai-action primary" data-rec="run-studio" ${REC.studioBusy ? 'disabled' : ''}>${REC.studioBusy ? '✦ Generating…' : '✦ Generate with AI'}</button>
+            ${REC.studioOutput ? `
+              <button type="button" class="ai-action" data-rec="insert-studio">Insert into note</button>
+              <button type="button" class="ai-action" data-rec="copy-studio">Copy</button>
+            ` : ''}
+          </div>
+          ${REC.studioOutput ? `<div class="rec-studio-output ai-md">${markdownToHtml(REC.studioOutput)}</div>` : ''}
+        </div>
+      ` : '';
+
       const tail = (() => {
         if (status === 'idle') return `<label class="nzai-label" for="rec-enhance">Notes style</label><select class="nzai-field" id="rec-enhance">${[['auto', REC.mode === 'meeting' ? 'Meeting minutes' : 'Class notes'], ['summary', 'Summary and action items'], ['quiz', 'Quiz from this lecture'], ['clean', 'Clean transcript only'], ['none', 'Transcript only (no AI notes)']].map(([v, l]) => `<option value="${v}" ${(REC.choice || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select><p class="rec-muted">Tell everyone you are recording, and get their agreement first.</p>`;
         if (status === 'finishing') return `<div class="rec-actions"><button type="button" class="ai-action" data-rec="close">Hide panel</button></div>`;
         if (status === 'done') return `<div class="rec-actions"><button type="button" class="ai-action primary big" data-rec="open">Open note</button><button type="button" class="ai-action big" data-rec="names">Name speakers</button><button type="button" class="ai-action" data-rec="close">Close</button></div>`;
         return '';
       })();
-      return `${intro}${stage}<div id="rec-live" class="rec-live">${recLiveHtml()}</div>${tail}`;
+      return `${intro}${stage}${audioPlayerCard}${studioCard}<div id="rec-live" class="rec-live">${recLiveHtml()}</div>${tail}`;
     }
     let recMeterCtx = null, recMeterRaf = 0;
     function recStartMeter(stream) {
       try {
         recMeterCtx = new (window.AudioContext || window.webkitAudioContext)();
         const source = recMeterCtx.createMediaStreamSource(stream), analyser = recMeterCtx.createAnalyser();
-        analyser.fftSize = 512; source.connect(analyser);
-        const data = new Uint8Array(analyser.fftSize);
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.75;
+        source.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
         const frame = () => {
-          analyser.getByteTimeDomainData(data);
-          let peak = 0; for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
-          const level = $('#rec-level'); if (level) level.style.width = Math.min(100, peak / 128 * 140) + '%';
+          if (!recMeterCtx) return;
+          analyser.getByteFrequencyData(data);
+          let peak = 0; for (const v of data) peak = Math.max(peak, v);
+          const level = $('#rec-level'); if (level) level.style.width = Math.min(100, Math.round((peak / 255) * 100)) + '%';
+          const canvas = document.getElementById('rec-canvas-waveform');
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            const bars = 28;
+            const barW = 5;
+            const gap = 4;
+            const totalW = bars * (barW + gap);
+            const startX = Math.max(0, (w - totalW) / 2);
+            const accent = getComputedStyle(document.documentElement).getPropertyValue('--nz-accent').trim() || '#5b6cf0';
+            for (let i = 0; i < bars; i++) {
+              const idx = Math.floor(i * (data.length / (bars * 1.6)));
+              const val = data[idx] || 0;
+              const ratio = val / 255;
+              const minH = REC.status === 'recording' ? 4 : 2;
+              const barH = Math.max(minH, ratio * (h - 6));
+              const x = startX + i * (barW + gap);
+              const y = (h - barH) / 2;
+              const grad = ctx.createLinearGradient(0, y, 0, y + barH);
+              grad.addColorStop(0, accent);
+              grad.addColorStop(1, 'rgba(128,150,230,0.3)');
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              if (ctx.roundRect) ctx.roundRect(x, y, barW, barH, 2.5);
+              else ctx.rect(x, y, barW, barH);
+              ctx.fill();
+            }
+          }
           recMeterRaf = requestAnimationFrame(frame);
         };
         frame();
@@ -474,21 +677,33 @@ Output only the transcript.`;
         REC.stream = stream; REC.mime = recMime(); REC.choice = $('#rec-enhance')?.value || 'auto';
         REC.startedAt = Date.now(); REC.pausedMs = 0; REC.pausedAt = 0; REC.segTexts = []; REC.segIdx = 0; REC.processed = 0; REC.expectedParts = 0;
         REC.failovers = 0; REC.liveNotes = ''; REC.provider = ''; REC.notice = ''; REC.errors = 0; REC.queue = Promise.resolve(); REC.status = 'recording';
+        REC.allAudioBlobs = []; REC.audioBlob = null; REC.audioUrl = null; REC.audioEl = null; REC.isPlaying = false;
+        REC.liveSpeechTurns = []; REC.interimText = ''; REC.studioOutput = '';
         const when = new Date();
         const note = normalizeNote({ id: uid(), title: `${REC.mode === 'meeting' ? 'Meeting' : 'Class'} recording · ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, subject: (currentFolderPath || (REC.mode === 'meeting' ? 'Meetings' : 'Classes')).split('/')[0], folderPath: currentFolderPath || (REC.mode === 'meeting' ? 'Meetings' : 'Classes'), tags: ['RECORDING', 'LIVE'], kind: 'markdown', body: recNoteBody('', '', false), createdAt: Date.now(), updatedAt: Date.now(), lastViewedAt: Date.now() });
         REC.noteId = note.id; notes = [note, ...notes]; addFolderPath(note.folderPath); persistNote(note).catch(() => {}); renderEverything();
-        startPart(); recRunTimers(); recStartMeter(stream); recRender();
+        recChime('start');
+        startPart(); recRunTimers(); recStartMeter(stream); startLiveSpeechRec(); recRender();
       }).catch(error => { console.error('Recording could not start:', error); toast(error?.name === 'NotAllowedError' ? 'Microphone access was blocked. Allow it in your browser settings.' : 'Could not open the microphone.', 'error', 6000); });
     }
-    function recPause() { if (REC.status !== 'recording') return; endPart(); REC.status = 'paused'; REC.pausedAt = Date.now(); clearInterval(REC.segTimer); REC.segTimer = 0; recRender(); }
-    function recResume() { if (REC.status !== 'paused') return; REC.pausedMs += Date.now() - REC.pausedAt; REC.pausedAt = 0; REC.status = 'recording'; startPart(); recRunTimers(); recRender(); }
+    function recPause() { if (REC.status !== 'recording') return; recChime('pause'); stopLiveSpeechRec(); endPart(); REC.status = 'paused'; REC.pausedAt = Date.now(); clearInterval(REC.segTimer); REC.segTimer = 0; recRender(); }
+    function recResume() { if (REC.status !== 'paused') return; recChime('start'); REC.pausedMs += Date.now() - REC.pausedAt; REC.pausedAt = 0; REC.status = 'recording'; startPart(); recRunTimers(); startLiveSpeechRec(); recRender(); }
     async function recStop() {
       if (REC.status !== 'recording' && REC.status !== 'paused') return;
       if (REC.status === 'recording') { REC.pausedAt = 0; }
       REC.status = 'finishing'; clearRecTimers(); recRender();
-      await endPart();                                     // the last part is finalised before the microphone is released
+      recChime('stop');
+      stopLiveSpeechRec();
+      await endPart();
       recStopMeter(); REC.stream?.getTracks().forEach(track => track.stop());
-      await Promise.race([REC.queue, recSleep(180000)]);  // parts are transcribed first; a stuck part cannot block the note for more than 3 minutes
+      if (REC.allAudioBlobs && REC.allAudioBlobs.length > 0) {
+        REC.audioBlob = new Blob(REC.allAudioBlobs, { type: REC.mime.split(';')[0] || 'audio/webm' });
+        try {
+          if (REC.audioUrl) URL.revokeObjectURL(REC.audioUrl);
+          REC.audioUrl = URL.createObjectURL(REC.audioBlob);
+        } catch {}
+      }
+      await Promise.race([REC.queue, recSleep(180000)]);
       recSaveNote(true, REC.liveNotes);
       if (recLiveTranscript() && REC.choice !== 'none') {
         try { await recRefreshNotes(true); recSaveNote(true, REC.liveNotes); } catch (error) { REC.notice = `Full notes could not be written (${aiErrorMessage(error)}). The transcript is saved.`; }
@@ -510,9 +725,118 @@ Output only the transcript.`;
       if (act === 'names') { const note = notes.find(item => item.id === REC.noteId); const voices = note ? recDetectVoices(note.body) : []; if (voices.length) recOfferNames(REC.noteId, voices); else toast('No speaker labels found in this note yet.'); return; }
       if (act === 'open') { const note = notes.find(item => item.id === REC.noteId); nzaiClose(); if (note) openNote(note.id); return; }
       if (act === 'close') {
-        nzaiClose(); return;   // recording keeps running in the background
+        nzaiClose(); return;
+      }
+      if (act === 'audio-play') {
+        if (!REC.audioUrl) return;
+        if (!REC.audioEl) {
+          REC.audioEl = new Audio(REC.audioUrl);
+          REC.audioEl.playbackRate = REC.playRate || 1;
+          REC.audioEl.addEventListener('timeupdate', () => {
+            const cur = REC.audioEl.currentTime;
+            const dur = REC.audioEl.duration || (recElapsed() / 1000);
+            const scrubber = $('#rec-audio-scrubber');
+            if (scrubber) scrubber.value = dur ? (cur / dur) * 100 : 0;
+            const timeTxt = $('#rec-audio-cur-time');
+            if (timeTxt) timeTxt.textContent = fmtClock(cur * 1000);
+          });
+          REC.audioEl.addEventListener('ended', () => {
+            REC.isPlaying = false;
+            const btn = document.querySelector('[data-rec="audio-play"]');
+            if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+          });
+        }
+        const btn = event.target.closest('[data-rec="audio-play"]');
+        if (REC.audioEl.paused) {
+          REC.audioEl.play().catch(() => {});
+          REC.isPlaying = true;
+          if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+        } else {
+          REC.audioEl.pause();
+          REC.isPlaying = false;
+          if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        }
+        return;
+      }
+      if (act === 'audio-speed') {
+        const rate = Number(event.target.closest('[data-rate]')?.dataset.rate || 1);
+        REC.playRate = rate;
+        if (REC.audioEl) REC.audioEl.playbackRate = rate;
+        document.querySelectorAll('.rec-speed-chip').forEach(c => c.classList.toggle('on', Number(c.dataset.rate) === rate));
+        return;
+      }
+      if (act === 'set-studio') {
+        REC.studioMode = event.target.closest('[data-mode]')?.dataset.mode || 'class';
+        document.querySelectorAll('.rec-studio-mode').forEach(b => b.classList.toggle('on', b.dataset.mode === REC.studioMode));
+        return;
+      }
+      if (act === 'run-studio') {
+        const transcript = recLiveTranscript();
+        if (!transcript) { toast('No transcript available to process.', 'error'); return; }
+        const instruction = RECORD_MODES[REC.studioMode] || RECORD_MODES.summary;
+        REC.studioBusy = true;
+        recRender();
+        recTextCall(`${instruction}\n\n<transcript>\n${transcript.slice(-16000)}\n</transcript>`)
+          .then(res => {
+            REC.studioOutput = res;
+            toast('AI note generated!', 'success');
+          })
+          .catch(err => {
+            toast(`Generation failed: ${aiErrorMessage(err)}`, 'error');
+          })
+          .finally(() => {
+            REC.studioBusy = false;
+            recRender();
+          });
+        return;
+      }
+      if (act === 'insert-studio') {
+        if (!REC.studioOutput) return;
+        const note = notes.find(n => n.id === REC.noteId);
+        if (note) {
+          note.body += `\n\n---\n\n## AI Studio: ${REC.studioMode.toUpperCase()}\n\n${REC.studioOutput}`;
+          note.updatedAt = Date.now();
+          persistNote(note).catch(() => {});
+          renderEverything();
+          toast('Inserted into note!', 'success');
+        }
+        return;
+      }
+      if (act === 'copy-studio') {
+        if (!REC.studioOutput) return;
+        navigator.clipboard.writeText(REC.studioOutput).then(() => toast('Copied to clipboard!', 'success')).catch(() => {});
+        return;
+      }
+      if (act === 'rename-speaker') {
+        const voice = event.target.closest('[data-voice]')?.dataset.voice;
+        if (!voice) return;
+        const note = notes.find(item => item.id === REC.noteId);
+        const next = prompt(`Rename “${voice}” to:`, '');
+        if (next && next.trim()) {
+          const clean = next.trim().slice(0, 40);
+          if (note) {
+            const re = new RegExp(`(^|\\n)((?:\\[[\\d:]+\\]\\s*)?\\s*\\**\\s*)${voice.replace(/\s+/g,'\\s+')}(\\s*\\**\\s*):`, 'gi');
+            note.body = note.body.replace(re, (_, lead, pre, post) => `${lead}${pre}${clean}${post}:`);
+            persistNote(note).catch(() => {});
+          }
+          REC.segTexts = REC.segTexts.map(txt => txt ? txt.replace(new RegExp(`(^|\\n)((?:\\[[\\d:]+\\]\\s*)?\\s*\\**\\s*)${voice.replace(/\s+/g,'\\s+')}(\\s*\\**\\s*):`, 'gi'), (_, lead, pre, post) => `${lead}${pre}${clean}${post}:`) : txt);
+          if (REC.liveSpeechTurns) {
+            REC.liveSpeechTurns.forEach(t => { if (t.speaker === voice) t.speaker = clean; });
+          }
+          renderEverything();
+          updateRecLive();
+          toast(`Renamed ${voice} to ${clean}`);
+        }
+        return;
       }
     }
+    document.addEventListener('input', event => {
+      if (event.target.id === 'rec-audio-scrubber' && REC.audioEl) {
+        const dur = REC.audioEl.duration || (recElapsed() / 1000);
+        REC.audioEl.currentTime = (Number(event.target.value) / 100) * dur;
+      }
+    });
+
     // Recording keeps going if the dialog is hidden; reopen it from Import to see progress.
     function bytesToB64Safe(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin); }
     const RECORD_LABEL_GROQ = `Below is a transcript of a classroom or meeting part with no speaker labels. Split it into turns and label each turn "Voice 1:", "Voice 2:" and so on, using context: who asks, who answers, greetings and changes of topic. Keep the same label for the same person. Do not change, correct or add any words. Output only the labelled transcript.`;
@@ -528,8 +852,12 @@ Output only the transcript.`;
       class: 'Write classroom study notes from this transcript: the topics covered in order, key definitions, facts and examples, formulas or dates, the questions the teacher asked, and a short list of things to revise. Use Markdown headings and bullets. Use only what is in the transcript.',
       meeting: 'Write meeting minutes from this transcript: attendees (by Voice label), decisions made, action items with owners and deadlines where stated, open questions, and a short summary. Use Markdown headings and bullets. Use only what is in the transcript.',
       summary: 'Write a short summary of this transcript, followed by key points and action items (owner if stated). Use Markdown. Use only what is in the transcript.',
+      action: 'Extract every decision, task, and action item from this transcript into a clear markdown checklist with checkboxes (- [ ]) and assigned owners or deadlines where mentioned. Group by topic if helpful. Use only what is in the transcript.',
+      flashcards: 'Create 5-8 active recall flashcards from this transcript in format:\n\n### Card 1\n**Q:** [Clear question]\n**A:** [Direct, accurate answer]\n\nFocus on definitions, core concepts, formulas, and high-yield study material. Use only what is in the transcript.',
       quiz: 'Write a five-question multiple-choice quiz from this transcript. For each question give four options (a to d), the correct letter, and a one-line explanation. Use only what the transcript says. Use Markdown with a heading for each question.',
-      clean: 'Clean up this transcript: fix punctuation, capitalisation and obvious mis-hearings where the meaning is clear. Keep every Voice label and every turn in order. Do not summarise or add anything. Output only the cleaned transcript.'
+      clean: 'Clean up this transcript: fix punctuation, capitalisation, and obvious mis-hearings where the meaning is clear. Keep every Voice label and every turn in order. Do not summarise or add anything. Output only the cleaned transcript.',
+      urdu: 'Translate this transcript and create well-structured study notes in Urdu (اردو), with clear headings, bullet points, key concepts, and takeaways. Use only what is in the transcript.',
+      hindi: 'Translate this transcript and create well-structured study notes in Hindi (हिन्दी), with clear headings, bullet points, key concepts, and takeaways. Use only what is in the transcript.'
     };
     function recSplitForAi(text, limit) {
       const parts = []; let current = '';
@@ -575,8 +903,124 @@ Output only the transcript.`;
         };
       });
     }
+
+    // In-editor voice dictation
+    let editorDictationSR = null;
+    function initEditorDictation() {
+      const btn = $('#editor-dictate-btn');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          toast('Speech dictation is not supported in this browser. Try Chrome, Edge, or Safari.', 'error', 5000);
+          return;
+        }
+        if (editorDictationSR) {
+          try { editorDictationSR.stop(); } catch {}
+          editorDictationSR = null;
+          btn.classList.remove('is-dictating');
+          btn.querySelector('span').textContent = 'Dictate';
+          toast('Voice dictation stopped.');
+          return;
+        }
+        try {
+          const sr = new SR();
+          sr.continuous = true;
+          sr.interimResults = true;
+          const lang = document.documentElement.lang === 'ur' ? 'ur-PK' : document.documentElement.lang === 'hi' ? 'hi-IN' : 'en-US';
+          sr.lang = lang;
+          btn.classList.add('is-dictating');
+          btn.querySelector('span').textContent = 'Listening…';
+          recChime('start');
+          toast('Listening… speak to type directly into your note.');
+          const textarea = $('#note-body-input');
+          sr.onresult = event => {
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                const phrase = event.results[i][0].transcript.trim();
+                if (phrase && textarea) {
+                  const start = textarea.selectionStart ?? textarea.value.length;
+                  const end = textarea.selectionEnd ?? start;
+                  const space = (start > 0 && !/\s$/.test(textarea.value.slice(0, start))) ? ' ' : '';
+                  textarea.setRangeText(space + phrase + ' ', start, end, 'end');
+                  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+              }
+            }
+          };
+          sr.onerror = e => {
+            if (e.error !== 'no-speech') {
+              console.warn('Dictation error:', e.error);
+              toast(`Dictation paused (${e.error}). Click Dictate to retry.`, 'error');
+            }
+          };
+          sr.onend = () => {
+            if (editorDictationSR) {
+              try { sr.start(); } catch {
+                btn.classList.remove('is-dictating');
+                btn.querySelector('span').textContent = 'Dictate';
+                editorDictationSR = null;
+              }
+            }
+          };
+          sr.start();
+          editorDictationSR = sr;
+        } catch (err) {
+          btn.classList.remove('is-dictating');
+          btn.querySelector('span').textContent = 'Dictate';
+          editorDictationSR = null;
+          toast('Could not start dictation. Check microphone permissions.', 'error');
+        }
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initEditorDictation);
+    } else {
+      setTimeout(initEditorDictation, 100);
+    }
+
     const recCss = document.createElement('style');
-    recCss.textContent = `.rec-opt{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;font:600 12px system-ui,sans-serif}.rec-opt input{accent-color:var(--nz-accent)}.rec-status{display:flex;align-items:center;gap:10px;margin:12px 0 6px}.rec-dot{width:10px;height:10px;border-radius:50%;background:rgba(128,148,170,.5)}.rec-dot.live{background:#d9534f;animation:nzPulse 1.2s infinite}.rec-dot.busy{background:var(--nz-accent);animation:nzPulse 1s infinite}@keyframes nzPulse{50%{opacity:.35}}.rec-clock{font:700 26px ui-monospace,monospace;font-variant-numeric:tabular-nums}.rec-state{font-size:12px;opacity:.7}.rec-meter{height:6px;border-radius:9px;background:rgba(128,148,170,.2);overflow:hidden;margin:8px 0 12px}.rec-meter i{display:block;height:100%;background:var(--nz-accent);transition:width .1s}.rec-small{font-size:11.5px;opacity:.7;margin:8px 0}.rec-name-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:8px;font-size:13px}.rec-live-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.rec-live-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.6}.rec-live-box{margin-top:4px;min-height:120px;max-height:220px;overflow:auto;padding:9px 10px;border-radius:10px;border:1px solid rgba(128,148,170,.25);font-size:12px;line-height:1.5}.rec-live-box div{margin-bottom:4px}.rec-provider{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;opacity:.8;margin-top:4px}.rec-notice{margin-top:8px}@media(max-width:560px){.rec-live-grid{grid-template-columns:1fr}}`;
+    recCss.textContent = `.rec-opt{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;font:600 12px system-ui,sans-serif}.rec-opt input{accent-color:var(--nz-accent)}.rec-status{display:flex;align-items:center;gap:10px;margin:12px 0 6px}.rec-dot{width:10px;height:10px;border-radius:50%;background:rgba(128,148,170,.5)}.rec-dot.live{background:#d9534f;animation:nzPulse 1.2s infinite}.rec-dot.busy{background:var(--nz-accent);animation:nzPulse 1s infinite}@keyframes nzPulse{50%{opacity:.35}}.rec-clock{font:700 26px ui-monospace,monospace;font-variant-numeric:tabular-nums}.rec-state{font-size:12px;opacity:.7}.rec-meter{height:6px;border-radius:9px;background:rgba(128,148,170,.2);overflow:hidden;margin:8px 0 12px}.rec-meter i{display:block;height:100%;background:var(--nz-accent);transition:width .1s}.rec-small{font-size:11.5px;opacity:.7;margin:8px 0}.rec-name-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:8px;font-size:13px}.rec-live-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.rec-live-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.6}.rec-live-box{margin-top:4px;min-height:120px;max-height:220px;overflow:auto;padding:9px 10px;border-radius:10px;border:1px solid rgba(128,148,170,.25);font-size:12px;line-height:1.5}.rec-live-box div{margin-bottom:4px}.rec-provider{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;opacity:.8;margin-top:4px}.rec-notice{margin-top:8px}@media(max-width:560px){.rec-live-grid{grid-template-columns:1fr}}
+.rec-waveform-shell{width:100%;display:flex;justify-content:center;align-items:center;padding:6px 0;margin:4px 0 8px}
+.rec-canvas-waveform{display:block;max-width:100%;height:52px;border-radius:10px;background:color-mix(in srgb,var(--v3-card) 90%,var(--nz-accent));border:1px solid var(--v3-edge)}
+.rec-live-interim{padding:8px 12px;margin:6px 0 8px;border-radius:12px;background:var(--v3-tint);border:1px dashed color-mix(in srgb,var(--nz-accent) 35%,transparent);display:flex;flex-direction:column;gap:4px;transition:all .2s ease}
+.rec-live-interim.active{background:color-mix(in srgb,var(--nz-accent) 12%,var(--v3-card));border-style:solid}
+.rec-interim-pulse{font-size:10px;font-weight:750;letter-spacing:.08em;color:var(--nz-accent);display:inline-flex;align-items:center;gap:6px;text-transform:uppercase}
+.rec-interim-pulse i{width:7px;height:7px;border-radius:50%;background:#d9534f;display:inline-block;animation:nzPulse 1.2s infinite}
+.rec-live-interim p{margin:0;font-size:13px;line-height:1.5;color:var(--chat-ink);font-style:italic}
+.rec-speaker-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;border:1px solid var(--v3-edge);background:var(--v3-card);color:var(--chat-ink);font-size:11px;font-weight:650;cursor:pointer;transition:transform .12s,background .12s}
+.rec-speaker-badge:hover{transform:translateY(-1px);background:var(--v3-tint);border-color:var(--nz-accent)}
+.rec-audio-card{padding:14px;margin:10px 0;border-radius:14px;background:var(--v3-card);border:1px solid var(--v3-edge);display:flex;flex-direction:column;gap:10px}
+.rec-audio-header{display:flex;justify-content:space-between;align-items:center}
+.rec-audio-badge{font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;color:var(--chat-ink)}
+.rec-audio-badge i{width:8px;height:8px;border-radius:50%;background:var(--nz-accent)}
+.rec-audio-dur{font-size:12px;color:var(--chat-muted);font-variant-numeric:tabular-nums}
+.rec-audio-row{display:flex;align-items:center;gap:10px}
+.rec-audio-play-btn{width:40px;height:40px;flex:0 0 40px;border-radius:50%;border:0;background:var(--nz-accent);color:#fff;display:grid;place-items:center;cursor:pointer;transition:transform .14s,filter .14s}
+.rec-audio-play-btn:hover{filter:brightness(1.08);transform:scale(1.04)}
+.rec-audio-timeline{flex:1;display:flex;flex-direction:column;gap:3px}
+.rec-audio-scrubber{width:100%;accent-color:var(--nz-accent);cursor:pointer;height:5px}
+.rec-audio-time-row{display:flex;justify-content:space-between;font-size:10.5px;color:var(--chat-muted);font-variant-numeric:tabular-nums}
+.rec-audio-speed-chips{display:flex;gap:3px}
+.rec-speed-chip{padding:2px 6px;border-radius:6px;border:1px solid var(--v3-edge);background:transparent;font-size:10.5px;font-weight:600;color:var(--chat-muted);cursor:pointer}
+.rec-speed-chip.on{background:var(--v3-tint);color:var(--nz-accent);border-color:color-mix(in srgb,var(--nz-accent) 40%,transparent)}
+.rec-audio-actions{display:flex;justify-content:flex-end;padding-top:4px}
+.rec-audio-dl-link{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--chat-muted);text-decoration:none;padding:3px 8px;border-radius:6px;transition:color .12s}
+.rec-audio-dl-link:hover{color:var(--nz-accent)}
+.rec-studio-card{padding:14px;margin:10px 0;border-radius:14px;background:color-mix(in srgb,var(--v3-card) 95%,var(--nz-accent));border:1px solid color-mix(in srgb,var(--nz-accent) 25%,var(--v3-edge));display:flex;flex-direction:column;gap:10px}
+.rec-studio-head h4{margin:2px 0 0;font-size:14px;color:var(--chat-ink)}
+.rec-studio-kicker{font-size:10px;font-weight:750;letter-spacing:.08em;color:var(--nz-accent)}
+.rec-studio-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+@media(max-width:480px){.rec-studio-modes{grid-template-columns:repeat(2,1fr)}}
+.rec-studio-mode{padding:7px 8px;border-radius:9px;border:1px solid var(--v3-edge);background:var(--v3-card);font-size:11.5px;font-weight:600;color:var(--chat-muted);cursor:pointer;text-align:left;transition:all .14s ease}
+.rec-studio-mode:hover{border-color:var(--nz-accent);color:var(--chat-ink);background:var(--v3-tint)}
+.rec-studio-mode.on{background:var(--v3-tint);border-color:var(--nz-accent);color:var(--nz-accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--nz-accent) 25%,transparent)}
+.rec-studio-action-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.rec-studio-output{max-height:220px;overflow-y:auto;padding:10px 12px;border-radius:10px;border:1px solid var(--v3-edge);background:var(--v3-card);font-size:12.5px;line-height:1.6}
+.markdown-tool-dictate{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;border:1px solid var(--v3-edge);background:transparent;color:inherit;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.markdown-tool-dictate:hover{background:var(--v3-tint);color:var(--nz-accent)}
+.markdown-tool-dictate.is-dictating{background:#d9534f;color:#fff;border-color:#d9534f;animation:nzPulse 1.2s infinite}
+.reader-tool#copy-current.copied{background:color-mix(in srgb,#34a853 20%,transparent);color:#34a853;border-color:#34a853}`;
     document.head.appendChild(recCss);
 
     // ================= Reliability: error log, friendly failures, diagnostics =================

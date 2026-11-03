@@ -13,11 +13,13 @@ export function TranscriptView({
   speakers,
   waiting,
   sessionActive,
+  onCopy,
 }: {
   segments: TranscriptSegment[];
   speakers: RecordingSpeaker[];
   waiting: boolean;
   sessionActive: boolean;
+  onCopy?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldFollow = useRef(true);
@@ -45,7 +47,19 @@ export function TranscriptView({
           <p className="record-eyebrow">THE CONVERSATION</p>
           <h2>Transcript</h2>
         </div>
-        {sessionActive && <span className="record-live-tag"><i /> Live</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {segments.length > 0 && onCopy && (
+            <button
+              type="button"
+              className="record-transcript-copy-btn"
+              onClick={onCopy}
+              title="Copy transcript to clipboard"
+            >
+              Copy transcript
+            </button>
+          )}
+          {sessionActive && <span className="record-live-tag"><i /> Live</span>}
+        </div>
       </header>
       <div className="record-transcript-scroll" ref={scrollRef} onScroll={handleScroll} aria-live="polite">
         {waiting && segments.length === 0 ? (

@@ -1394,7 +1394,7 @@
       for (const value of ops.folder || []) { const path = String(note.folderPath || '').toLowerCase(); if (!(path === value || path.startsWith(value + '/') || path.includes(value))) return false; }
       for (const value of ops.type || []) { const kinds = [note.kind, ext, isPdfNote(note) ? 'pdf' : '']; if (!kinds.includes(value)) return false; }
       for (const value of ops.is || []) {
-        const ok = value === 'starred' ? !!note.favorite : value === 'pinned' ? !!note.pinned : value === 'covered' ? progressOf(note) >= 0.9 : value === 'due' ? isReviewDue(note) : value === 'untagged' ? !(note.tags || []).length : true;
+        const ok = value === 'starred' ? !!note.favorite : value === 'pinned' ? !!note.pinned : value === 'covered' ? progressOf(note) >= 0.9 : value === 'due' ? isReviewDue(note) : value === 'recording' ? (note.kind === 'recording' || (note.tags || []).map(t => String(t).toLowerCase()).includes('recording')) : value === 'untagged' ? !(note.tags || []).length : true;
         if (!ok) return false;
       }
       for (const value of ops.before || []) { if (!(day(note.updatedAt) < value)) return false; }

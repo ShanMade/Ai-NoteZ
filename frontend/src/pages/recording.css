@@ -207,6 +207,71 @@
 .record-button-primary:hover:not(:disabled) { background: #9c583b; }
 .record-recovery-dismiss { border: 0; background: transparent; padding: 7px; color: #9a9084; cursor: pointer; font-size: 10px; }
 .record-status-message { margin-top: 15px; padding: 10px 13px; border: 1px solid #e8d8c6; border-radius: 8px; background: #fffaf2; color: #90643e; font-size: 11px; line-height: 1.5; }
+
+.record-actions-card {
+  border: 1px solid #dfcfbe;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fffdfa, #f9f4ec);
+  padding: 13px 15px;
+  box-shadow: 0 4px 18px rgba(92, 64, 45, .04);
+}
+.record-actions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+.record-actions-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rec-accent);
+  font: 9px "DM Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.record-actions-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4f7b56;
+  font-size: 10px;
+  background: #eaf3e9;
+  padding: 2px 7px;
+  border-radius: 99px;
+  animation: transcript-arrive .2s ease;
+}
+.record-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.record-actions-buttons .record-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 0 10px;
+}
+
+.record-transcript-copy-btn {
+  border: 1px solid #e2d7c9;
+  background: #fffdf9;
+  color: var(--rec-copy);
+  font-size: 9px;
+  font-family: "DM Mono", monospace;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .16s ease;
+}
+.record-transcript-copy-btn:hover {
+  background: var(--rec-wash);
+  color: var(--rec-ink);
+  border-color: #cbbaa5;
+}
+
 .record-page-footer { min-height: 43px; padding: 0 clamp(16px, 4vw, 58px); display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid var(--rec-line); color: #9a9084; font: 9px "DM Mono", monospace; }
 .record-page-footer i { padding: 0 3px; color: #c5b49f; font-style: normal; }
 

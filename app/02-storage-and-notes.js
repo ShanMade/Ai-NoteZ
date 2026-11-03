@@ -153,7 +153,7 @@ function noteRowMarkup(note, dateMode = 'updated') {
       if (select) select.value = prioFilter;
     }
     // Filter chips above the library: tap to add or remove a search operator.
-    const FILTER_CHIPS = [['is:starred','Starred'],['is:pinned','Pinned'],['is:covered','Covered'],['is:due','Due'],['is:untagged','Untagged'],['type:pdf','PDF'],['type:html','HTML'],['type:markdown','Markdown']];
+    const FILTER_CHIPS = [['is:recording','🎙️ Recordings'],['is:starred','Starred'],['is:pinned','Pinned'],['is:covered','Covered'],['is:due','Due'],['is:untagged','Untagged'],['type:pdf','PDF'],['type:html','HTML'],['type:markdown','Markdown']];
     function ensureFilterChips() {
       const heading = $('#list-view .page-heading'); if (!heading) return;
       let bar = $('#filter-chips');

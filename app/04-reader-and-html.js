@@ -1,5 +1,21 @@
 $('#focus-exit-button').addEventListener('click', toggleFocus);
     $('#download-current').addEventListener('click', () => downloadNote());
+    $('#copy-current')?.addEventListener('click', async () => {
+      const note = notes.find(item => item.id === activeId);
+      if (!note) return;
+      const content = `${note.title ? `# ${note.title}\n\n` : ''}${note.body || ''}`;
+      try {
+        await navigator.clipboard.writeText(content);
+        const btn = $('#copy-current');
+        if (btn) {
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 2000);
+        }
+        toast('Note copied to clipboard!', 'success', 2500);
+      } catch {
+        toast('Could not copy to clipboard. Allow clipboard access.', 'error');
+      }
+    });
     $('#reader-outline-toggle').addEventListener('click', () => {
       const list = $('#reader-outline-list');
       const expanded = $('#reader-outline-toggle').getAttribute('aria-expanded') === 'true';

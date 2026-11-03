@@ -2537,3 +2537,54 @@ html[data-theme="dark"] #nz-ai { --v3-card: #16263a; --v3-edge: rgba(173,194,220
   #nz-ai .ai-card small { max-width: 210px; text-align: left; line-height: 1.4; }
   #nz-ai .ai-hint { margin-top: 20px; }
 }
+
+/* ================= Notez UI & UX Polish: Micro-Interactions & Elevate ================= */
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.note-card {
+  transition: transform .18s cubic-bezier(0.2, 0, 0, 1), box-shadow .18s cubic-bezier(0.2, 0, 0, 1), border-color .18s ease;
+}
+.note-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(18, 32, 28, .07);
+}
+html[data-theme="dark"] .note-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .32);
+}
+.filter-chip {
+  transition: all .15s ease;
+}
+.filter-chip:hover:not(.on) {
+  transform: translateY(-1px);
+  background: var(--v3-tint);
+  border-color: color-mix(in srgb, var(--nz-accent) 30%, var(--v3-edge));
+}
+.filter-chip.on {
+  background: var(--v3-tint);
+  border-color: var(--nz-accent);
+  color: var(--nz-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nz-accent) 25%, transparent);
+}
+.reader-tool {
+  transition: transform .14s ease, background .14s ease, color .14s ease, border-color .14s ease;
+}
+.reader-tool:hover {
+  transform: translateY(-1px);
+}
+.primary-button, .top-new, .study-launch-button {
+  transition: transform .15s cubic-bezier(0.2, 0, 0, 1), filter .15s ease, box-shadow .15s ease;
+}
+.primary-button:hover, .top-new:hover, .study-launch-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+#rec-pill {
+  box-shadow: 0 4px 18px rgba(217, 83, 79, .35);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+#rec-pill:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 22px rgba(217, 83, 79, .45);
+}
+
