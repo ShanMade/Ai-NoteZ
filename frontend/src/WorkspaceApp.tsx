@@ -16,6 +16,7 @@ import ChatPanel from "./components/ChatPanel";
 import { useOfflineSync } from "./hooks/useOfflineSync";
 import { useAuthStore } from "./store/auth";
 import { useUiStore } from "./store/ui";
+import { resolveTheme } from "./theme";
 import "./workspace.css";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
@@ -66,7 +67,7 @@ export function AuthGate() {
   };
 
   return (
-    <div className={`workspace-app direction-${direction}`} data-direction={direction} data-theme={theme}>
+    <div className={`workspace-app direction-${direction}`} data-direction={direction} data-theme={resolveTheme(theme)}>
       <main className="workspace-auth">
         <div className="workspace-auth-shell">
           <section className="workspace-auth-story" aria-label={t("auth.storyLabel")}>
@@ -710,13 +711,13 @@ export default function WorkspaceApp() {
   if (!user) return <AuthGate />;
 
   return (
-    <div className={`workspace-app direction-${direction}`} data-direction={direction} data-theme={theme}>
+    <div className={`workspace-app direction-${direction}`} data-direction={direction} data-theme={resolveTheme(theme)}>
       <header className="workspace-topbar">
         <button className="workspace-menu-button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label={t("errors.toggleNavigation")}><Menu size={19} /></button>
         <button className="workspace-logo" onClick={() => navigate("/")} aria-label={t("errors.home")}><span><Sparkles size={15} /></span>notez<span className="workspace-logo-period">.</span></button>
         <label className="workspace-global-search"><Search size={16} /><input value={search} onFocus={() => setPaletteOpen(true)} onChange={(event) => setSearch(event.target.value)} placeholder={t("library.search")} aria-label={t("library.search")} /><kbd>⌘ K</kbd></label>
         <div className="workspace-top-actions">
-          <button className="workspace-icon-button" aria-label={t("errors.toggleAppearance")} onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}>{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
+          <button className="workspace-icon-button" aria-label={t("errors.toggleAppearance")} onClick={() => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark")}>{resolveTheme(theme) === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
           <button className="workspace-icon-button" aria-label={t("errors.settings")} onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
           <button className="workspace-user" title={user.email ?? t("common.guest")} aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}>{(user.displayName ?? user.email ?? "G").slice(0, 1).toUpperCase()}</button>
           {profileOpen && (

@@ -1,3 +1,5 @@
+import { openSchemaDatabase } from "../offline/idb";
+
 export interface JournalSlice {
   sessionId_slot_seq: string;
   sessionId: string;
@@ -92,31 +94,15 @@ export class RecordingJournal {
   }
 
   private openOnce(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      if (typeof indexedDB === "undefined") {
-        reject(new Error("IndexedDB is unavailable in this browser."));
-        return;
-      }
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        if (!database.objectStoreNames.contains("slices")) {
-          database.createObjectStore("slices", { keyPath: "sessionId_slot_seq" });
-        }
-        if (!database.objectStoreNames.contains("parts")) {
-          database.createObjectStore("parts", { keyPath: "sessionId_index" });
-        }
-        if (!database.objectStoreNames.contains("sessions")) {
-          database.createObjectStore("sessions", { keyPath: "sessionId" });
-        }
-        if (!database.objectStoreNames.contains("jobs")) {
-          database.createObjectStore("jobs", { keyPath: "sessionId_index" });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error("Could not open the recording journal."));
-      request.onblocked = () => reject(new Error("The recording journal is blocked by another tab."));
-    });
+    if (typeof indexedDB === "undefined") {
+      return Promise.reject(new Error("IndexedDB is unavailable in this browser."));
+    }
+    return openSchemaDatabase(DATABASE_NAME, DATABASE_VERSION, [
+      { name: "slices", options: { keyPath: "sessionId_slot_seq" } },
+      { name: "parts", options: { keyPath: "sessionId_index" } },
+      { name: "sessions", options: { keyPath: "sessionId" } },
+      { name: "jobs", options: { keyPath: "sessionId_index" } },
+    ]);
   }
 
   private async transact<T>(

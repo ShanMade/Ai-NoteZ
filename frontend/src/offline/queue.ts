@@ -1,4 +1,5 @@
 import type { Note, NoteInput } from "../api/notes";
+import { openSchemaDatabase } from "./idb";
 
 export type OfflineOperation = "create" | "patch" | "delete";
 
@@ -31,27 +32,15 @@ queueChannel?.addEventListener("message", () => {
 function openDatabase(): Promise<IDBDatabase> {
   if (!("indexedDB" in window)) return Promise.reject(new Error("This browser does not support offline storage."));
   if (databasePromise) return databasePromise;
-  const opening = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, 2);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: "queueId", autoIncrement: true });
-      }
-      if (!database.objectStoreNames.contains(CACHE_STORE_NAME)) {
-        database.createObjectStore(CACHE_STORE_NAME, { keyPath: "ownerId" });
-      }
+  const opening = openSchemaDatabase(DATABASE_NAME, 2, [
+    { name: STORE_NAME, options: { keyPath: "queueId", autoIncrement: true } },
+    { name: CACHE_STORE_NAME, options: { keyPath: "ownerId" } },
+  ]).then((database) => {
+    database.onversionchange = () => {
+      database.close();
+      databasePromise = undefined;
     };
-    request.onsuccess = () => {
-      const database = request.result;
-      database.onversionchange = () => {
-        database.close();
-        databasePromise = undefined;
-      };
-      resolve(database);
-    };
-    request.onerror = () => reject(request.error ?? new Error("Offline storage could not be opened."));
-    request.onblocked = () => reject(new Error("Offline storage is waiting for another tab to close."));
+    return database;
   });
   databasePromise = opening;
   void opening.catch(() => {

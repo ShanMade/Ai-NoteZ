@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
+import { useUiStore } from "./store/ui";
+import { useDocumentTheme } from "./theme";
 import { DirectionApp } from "./design-directions/DirectionApp";
 import { DirectionSwitcher } from "./design-directions/DirectionSwitcher";
 import WorkspaceApp, { AuthGate } from "./WorkspaceApp";
@@ -43,5 +45,8 @@ function AuthInitializer() {
 }
 
 export default function App() {
+  const theme = useUiStore((state) => state.theme);
+  const direction = useUiStore((state) => state.direction);
+  useDocumentTheme(theme, direction);
   return <AuthInitializer />;
 }

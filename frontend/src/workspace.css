@@ -338,3 +338,142 @@
   .workspace-conflict-columns article { max-height: 24vh; }
   .workspace-sync-error { bottom: 74px; }
 }
+
+/* ============================================================
+   Notion-style refinement
+   Quieter chrome, sans-first hierarchy, a comfortable reading
+   measure, and hairline surfaces that adapt to light and dark.
+   ============================================================ */
+
+.workspace-app {
+  --notion-radius: 6px;
+  --notion-hover: var(--surface-hover);
+  --notion-measure: 720px;
+  font-family: var(--font-body), "DM Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Top bar: lighter, flat on the page surface, hairline divider */
+.workspace-topbar {
+  height: 52px;
+  flex-basis: 52px;
+  padding-inline: clamp(14px, 2.4vw, 28px);
+  gap: clamp(12px, 2vw, 24px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(1.2) blur(10px);
+  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  border-bottom-color: color-mix(in srgb, var(--border) 85%, transparent);
+}
+.workspace-logo { font-size: 15px; letter-spacing: -0.02em; }
+.workspace-logo > span:first-child { width: 24px; height: 24px; border-radius: 7px; }
+
+.workspace-global-search {
+  height: 32px;
+  border-radius: var(--notion-radius);
+  background: var(--surface-soft);
+  border-color: transparent;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+.workspace-global-search:focus-within {
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.workspace-global-search kbd { border-color: var(--border); background: var(--surface); }
+
+.workspace-icon-button, .workspace-menu-button {
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--notion-radius);
+  transition: background 120ms ease, color 120ms ease;
+}
+.workspace-icon-button:hover, .workspace-menu-button:hover {
+  border-color: transparent;
+  background: var(--notion-hover);
+}
+.workspace-user, .workspace-avatar { width: 28px; height: 28px; }
+
+/* Sidebar: Notion-style list with compact rows and sans headings */
+.workspace-sidebar {
+  width: 232px;
+  flex-basis: 232px;
+  padding: 14px 8px 12px;
+  background: var(--surface-soft);
+  border-inline-end-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+.workspace-sidebar-heading {
+  margin-bottom: 8px;
+  padding-inline: 8px 4px;
+  color: var(--text-muted);
+  font: 600 11px var(--font-body), "DM Sans", sans-serif;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.workspace-folders { gap: 1px; }
+.workspace-nav-item {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--notion-radius);
+  font-size: 13.5px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.workspace-nav-item:hover { background: var(--notion-hover); color: var(--text-primary); }
+.workspace-nav-item.is-active { background: var(--surface-hover); color: var(--text-primary); font-weight: 600; }
+.workspace-count { font-family: var(--font-body), "DM Sans", sans-serif; font-size: 11px; }
+.workspace-folder-toggle, .workspace-folder-toggle-spacer { height: 26px; border-radius: 4px; }
+.workspace-folder-toggle:hover { background: var(--notion-hover); }
+.workspace-sidebar-footer { border-top-color: color-mix(in srgb, var(--border) 85%, transparent); padding-top: 10px; }
+.workspace-user-copy strong { font-size: 12.5px; color: var(--text-primary); }
+
+/* Library: roomier heading, quieter cards, subtle hover lift */
+.workspace-main { padding: clamp(28px, 4vw, 52px) clamp(18px, 4.5vw, 64px) 40px; }
+.workspace-library { width: min(100%, 920px); }
+.workspace-welcome { margin-bottom: 28px; align-items: flex-end; }
+.workspace-welcome h1 { font: 700 34px/1.15 var(--font-display), "DM Sans", sans-serif; letter-spacing: -0.03em; }
+.workspace-eyebrow { font: 600 11px var(--font-body), "DM Sans", sans-serif; letter-spacing: 0.01em; color: var(--text-muted); }
+.workspace-primary, .workspace-secondary {
+  min-height: 32px;
+  border-radius: var(--notion-radius);
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.workspace-primary { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 22%, transparent); }
+.workspace-primary:hover { transform: none; }
+
+.workspace-note-card {
+  min-height: 150px;
+  padding: 16px 16px 14px;
+  border-radius: 10px;
+  border-color: color-mix(in srgb, var(--border) 90%, transparent);
+  box-shadow: none;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.workspace-note-card:hover {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--text-primary) 22%, transparent);
+  transform: translateY(-1px);
+}
+.workspace-note-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Note page: Notion-like title and a readable measure */
+.workspace-note-title {
+  font: 700 clamp(30px, 4.4vw, 40px)/1.15 var(--font-display), "DM Sans", var(--font-urdu), sans-serif;
+  letter-spacing: -0.03em;
+}
+.workspace-note-meta { color: var(--text-muted); font-size: 12px; }
+.workspace-note-body-content { max-width: var(--notion-measure); font-size: 16px; line-height: 1.72; }
+.workspace-note-body-content pre { border-radius: 8px; background: var(--surface-soft); }
+.workspace-note-body-content code { background: var(--surface-soft); color: var(--accent); }
+.workspace-editor-formatting button { border-radius: var(--notion-radius); }
+.workspace-editor-suggestions { border-radius: 10px; box-shadow: 0 14px 34px -12px color-mix(in srgb, var(--text-primary) 28%, transparent); }
+
+/* Shared focus treatment */
+.workspace-app :where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-app *, .workspace-app *::before, .workspace-app *::after { transition: none !important; animation: none !important; }
+}
