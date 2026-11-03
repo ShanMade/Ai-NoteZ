@@ -1,4 +1,4 @@
-import { uploadPart, type AccessTokenProvider } from "./api";
+import { apiErrorRetryAfterMs, apiErrorStatus, uploadPart, type AccessTokenProvider } from "./api";
 import { recordingJournal, type UploadJob } from "./journal";
 
 const RETRY_DELAYS = [30_000, 60_000, 120_000];
@@ -110,19 +110,43 @@ export class PartUploadQueue {
       await recordingJournal.saveJob(uploading);
       await this.refresh();
       try {
-        await uploadPart(job.sessionId, job.index, job.blob, job.isEmpty, this.tokenProvider);
+        const result = await uploadPart(job.sessionId, job.index, job.blob, job.isEmpty, this.tokenProvider);
+        // A 202 is not always success: re-uploading a part the server
+        // already knows returns that part's current status. A "failed"
+        // status must keep this job retryable instead of being marked done
+        // while the server never re-queues the part.
+        if (result.status === "failed") {
+          throw new Error("The server could not queue this part for transcription.");
+        }
         await recordingJournal.saveJob({ ...job, status: "done", error: undefined });
         this.onPartComplete(job.index);
       } catch (error) {
-        const attempts = job.attempts + 1;
-        const failed = attempts > RETRY_DELAYS.length;
-        await recordingJournal.saveJob({
-          ...job,
-          attempts,
-          status: failed ? "failed" : "queued",
-          nextAttemptAt: failed ? 0 : Date.now() + RETRY_DELAYS[attempts - 1],
-          error: error instanceof Error ? error.message : "The audio part could not be uploaded.",
-        });
+        const status = apiErrorStatus(error);
+        const message = error instanceof Error ? error.message : "The audio part could not be uploaded.";
+        if (status === 429) {
+          // Rate limiting is not an upload failure: keep the attempt budget
+          // and wait out the server's Retry-After instead of burning the
+          // three retries and stranding the part as "failed".
+          await recordingJournal.saveJob({
+            ...job,
+            status: "queued",
+            nextAttemptAt: Date.now() + (apiErrorRetryAfterMs(error) ?? RETRY_DELAYS[0]),
+            error: message,
+          });
+        } else if (status === 409) {
+          // The session no longer accepts this part; retrying cannot help.
+          await recordingJournal.saveJob({ ...job, status: "failed", nextAttemptAt: 0, error: message });
+        } else {
+          const attempts = job.attempts + 1;
+          const failed = attempts > RETRY_DELAYS.length;
+          await recordingJournal.saveJob({
+            ...job,
+            attempts,
+            status: failed ? "failed" : "queued",
+            nextAttemptAt: failed ? 0 : Date.now() + RETRY_DELAYS[attempts - 1],
+            error: message,
+          });
+        }
       }
       await this.refresh();
     }

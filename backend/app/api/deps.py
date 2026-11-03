@@ -38,7 +38,15 @@ async def rate_limit(
     user: CurrentUser,
     redis: Redis = Depends(get_redis),
 ) -> AuthedUser:
-    is_polling = request.url.path.endswith("/sync/delta")
+    # Read-only polling must not compete with writes for the general budget:
+    # the recording page polls the session, its speakers, and every part
+    # while transcription runs, and at the general 60/min limit those reads
+    # starved each other into 429s (and squeezed out uploads/retries, which
+    # share the general bucket).
+    is_polling = request.method == "GET" and (
+        request.url.path.endswith("/sync/delta")
+        or request.url.path.startswith("/v1/record/sessions/")
+    )
     limit = settings.polling_rate_limit_per_minute if is_polling else settings.rate_limit_per_minute
     now_ms = int(time.time() * 1000)
     window_ms = 60_000

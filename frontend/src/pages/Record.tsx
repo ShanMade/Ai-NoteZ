@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, CloudOff, Copy, FileText, Headphones, Radio, RotateCw, ShieldCheck, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { fetchPart, fetchSession, fetchSpeakers, manualRetryPart, renameSpeaker, type AccessTokenProvider } from "../recorder/api";
+import { apiErrorStatus, fetchPart, fetchSession, fetchSpeakers, manualRetryPart, renameSpeaker, retryPartTranscription, type AccessTokenProvider } from "../recorder/api";
 import { BrowserRecorder, type RecorderSnapshot } from "../recorder/engine";
 import { recordingJournal, type JournalSession } from "../recorder/journal";
 import type { RecordingPartRead, RecordingSpeaker, TranscriptSegment } from "../recorder/types";
@@ -83,6 +83,15 @@ export default function Record({
 
   const sessionId = snapshot.sessionId;
 
+  // The poll loop reads job indexes through a ref instead of depending on
+  // snapshot.jobs: the upload queue emits a fresh jobs array on every state
+  // change, which used to tear down and immediately re-run this effect,
+  // multiplying request volume until the API rate limiter answered 429.
+  const jobIndexesRef = useRef<number[]>([]);
+  useEffect(() => {
+    jobIndexesRef.current = [...new Set(snapshot.jobs.map((job) => job.index))];
+  }, [snapshot.jobs]);
+
   useEffect(() => {
     if (!sessionId) return;
     let active = true;
@@ -95,27 +104,44 @@ export default function Record({
         if (!active) return;
         setRemoteStatus(session.status);
         setSpeakers(currentSpeakers);
-        const indexes = [...new Set(snapshot.jobs.map((job) => job.index))];
-        const partReads = await Promise.all(indexes.map((index) => fetchPart(sessionId, index, accessToken)));
-        if (active) {
-          setParts(Object.fromEntries(partReads.map((part) => [part.part_index, part])));
-          if (session.status === "rate_limited") {
-            setPageError("Transcription is waiting for Gemini’s rate limit to clear. Your audio remains saved.");
-          } else if (session.status === "has_failed_parts") {
-            setPageError("One or more parts need a retry. Your transcript and original audio are still here.");
-          }
+        // A part the server does not know yet (its upload is still queued
+        // locally or just failed with 503) returns 404; that must not fail
+        // the whole refresh or mask the session status.
+        const partResults = await Promise.allSettled(
+          jobIndexesRef.current.map((index) => fetchPart(sessionId, index, accessToken)),
+        );
+        if (!active) return;
+        const fetched = partResults
+          .filter((result): result is PromiseFulfilledResult<RecordingPartRead> => result.status === "fulfilled")
+          .map((result) => result.value);
+        if (fetched.length) {
+          setParts((current) => ({
+            ...current,
+            ...Object.fromEntries(fetched.map((part) => [part.part_index, part])),
+          }));
+        }
+        if (session.status === "rate_limited") {
+          setPageError("Transcription is waiting for Gemini’s rate limit to clear. Your audio remains saved.");
+        } else if (session.status === "has_failed_parts") {
+          setPageError("One or more parts need a retry. Your transcript and original audio are still here.");
+        } else {
+          setPageError((current) => current.startsWith("One or more parts need a retry") || current.startsWith("Transcription is waiting") ? "" : current);
         }
       } catch (error) {
-        if (active) setPageError(error instanceof Error ? error.message : "The recording status could not be refreshed.");
+        // A 429 here is the poller outrunning the rate limiter; the next
+        // tick will succeed, so don't flash it as a recording failure.
+        if (active && apiErrorStatus(error) !== 429) {
+          setPageError(error instanceof Error ? error.message : "The recording status could not be refreshed.");
+        }
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2500);
+    const timer = window.setInterval(() => void refresh(), 5000);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [accessToken, sessionId, snapshot.jobs]);
+  }, [accessToken, sessionId]);
 
   const transcript = useMemo<TranscriptSegment[]>(
     () => Object.values(parts)
@@ -155,12 +181,20 @@ export default function Record({
     setPageError("");
     try {
       const job = await recordingJournal.getJob(sessionId, index);
-      if (!job) throw new Error("The audio part is not available in this browser for manual retry.");
-      await manualRetryPart(sessionId, index, job.blob, accessToken);
-      setParts((current) => ({
+      if (job) {
+        // Re-upload the browser's copy: this also recovers parts whose
+        // audio never reached durable server storage.
+        await manualRetryPart(sessionId, index, job.blob, accessToken);
+        await recordingJournal.saveJob({ ...job, status: "queued", attempts: 0, nextAttemptAt: Date.now(), error: undefined });
+      } else {
+        // No local copy (different browser, cleared storage): the server
+        // still holds the audio, so ask it to transcribe that copy again.
+        await retryPartTranscription(sessionId, index, accessToken);
+      }
+      setParts((current) => (current[index] ? {
         ...current,
         [index]: { ...current[index], status: "queued" },
-      }));
+      } : current));
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "The recording part could not be retried.");
     } finally {

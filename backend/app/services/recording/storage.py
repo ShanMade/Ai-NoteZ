@@ -77,11 +77,18 @@ def read_audio(storage_key: str) -> bytes:
 
 
 def upload_url(storage_key: str, *, expires_in: int = 900) -> str:
+    # store_audio returns "r2://<bucket>/<key>" once an object lives in R2;
+    # presigning needs the bare object key, not that URI. Passing the URI as
+    # the key uploaded the replacement audio to a literal "r2://..." key
+    # that the transcription worker would never read back.
+    key = storage_key
+    if key.startswith("r2://"):
+        key = urlparse(key).path.lstrip("/")
     return _s3_client().generate_presigned_url(
         "put_object",
         Params={
             "Bucket": settings.r2_bucket,
-            "Key": storage_key,
+            "Key": key,
             "ContentType": "audio/wav",
         },
         ExpiresIn=expires_in,
