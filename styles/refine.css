@@ -1,0 +1,262 @@
+/* ============================================================
+   Notez UI refinement — "Editorial Paper & Ink"
+   Loaded after styles/app.css. Adjusts neutrals, surfaces,
+   typography and elevation toward a calmer, paper-like workspace.
+   The user-chosen accent (--nz-accent) is deliberately untouched.
+   ============================================================ */
+
+:root {
+  --nz-font-sans: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --nz-font-serif: "Newsreader", Georgia, Cambria, "Times New Roman", serif;
+  --nz-radius-sm: 8px;
+  --nz-radius-md: 10px;
+  --nz-radius-lg: 14px;
+  --nz-shadow-pop: 0 26px 64px -20px rgba(28, 27, 26, 0.3), 0 0 0 1px rgba(28, 27, 26, 0.045);
+}
+
+/* ---------------- Light: warm paper & ink ---------------- */
+
+html[data-theme="light"] {
+  --bg: #fdfdfc;
+  --side: #f5f4f1;
+  --panel: #ffffff;
+  --panel-raised: #f7f6f3;
+  --ink: #1c1b1a;
+  --muted: #7e7c76;
+  --muted-2: #a8a59e;
+  --line: #e8e6e0;
+  --line-strong: #d9d6ce;
+  --paper-ink: #1c1b1a;
+  --paper-muted: #7e7c76;
+}
+
+html[data-theme="light"] body {
+  background: #fdfdfc;
+  color: #1c1b1a;
+  font-family: var(--nz-font-sans);
+}
+
+html[data-theme="light"] .sidebar {
+  background: #f5f4f1;
+  border-right-color: #e8e6e0;
+}
+html[data-theme="light"] .space-label,
+html[data-theme="light"] .nav-heading { color: #a8a59e; }
+html[data-theme="light"] .nav-item { color: #4b4a46; }
+html[data-theme="light"] .nav-item .icon { color: #7e7c76; }
+html[data-theme="light"] .nav-item:hover { background: #edebe6; color: #1c1b1a; }
+html[data-theme="light"] .nav-item.active { background: #e6e4dd; color: #1c1b1a; }
+html[data-theme="light"] .nav-item.active .icon { color: var(--nz-accent); }
+html[data-theme="light"] .nav-count,
+html[data-theme="light"] .collection-count { color: #a8a59e; }
+html[data-theme="light"] .collection-item { color: #4b4a46; }
+html[data-theme="light"] .collection-item:hover,
+html[data-theme="light"] .collection-item.active { background: #edebe6; color: #1c1b1a; }
+html[data-theme="light"] .new-note-side {
+  background: #ffffff;
+  border-color: #d9d6ce;
+  color: #1c1b1a;
+  box-shadow: 0 1px 2px rgba(28, 27, 26, 0.05);
+}
+html[data-theme="light"] .new-note-side:hover {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--nz-accent) 45%, #d9d6ce);
+}
+html[data-theme="light"] .new-note-side .shortcut {
+  color: #7e7c76;
+  border-color: #e8e6e0;
+}
+html[data-theme="light"] .storage-card {
+  background: #ffffff;
+  border-color: #e8e6e0;
+}
+html[data-theme="light"] .sidebar-profile { border-top-color: #e8e6e0; }
+html[data-theme="light"] .profile-name { color: #1c1b1a; }
+html[data-theme="light"] .profile-type,
+html[data-theme="light"] .storage-top,
+html[data-theme="light"] .storage-card p { color: #7e7c76; }
+
+html[data-theme="light"] .topbar {
+  background: rgba(253, 253, 252, 0.92);
+  border-bottom-color: #e8e6e0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+html[data-theme="light"] .top-context .crumb { color: #7e7c76; }
+html[data-theme="light"] .top-context .crumb strong { color: #1c1b1a; }
+html[data-theme="light"] .top-context .subcrumb { color: #a8a59e; }
+html[data-theme="light"] .global-search {
+  background: #f7f6f3;
+  border-color: #e8e6e0;
+  color: #7e7c76;
+}
+html[data-theme="light"] .global-search input { color: #1c1b1a; }
+html[data-theme="light"] .global-search input::placeholder { color: #a8a59e; }
+html[data-theme="light"] .icon-button { color: #7e7c76; }
+html[data-theme="light"] .icon-button:hover {
+  background: #edebe6;
+  border-color: transparent;
+  color: #1c1b1a;
+}
+html[data-theme="light"] .top-upload {
+  border-color: #d9d6ce;
+  color: #4b4a46;
+  background: #ffffff;
+}
+html[data-theme="light"] .account-menu {
+  background: #ffffff;
+  border-color: #e8e6e0;
+  box-shadow: var(--nz-shadow-pop);
+  border-radius: var(--nz-radius-lg);
+}
+html[data-theme="light"] .account-menu button { color: #4b4a46; }
+html[data-theme="light"] .account-menu button:hover { background: #f5f4f1; color: #1c1b1a; }
+
+html[data-theme="light"] .library-pane {
+  background: #fdfdfc;
+  border-right-color: #e8e6e0;
+}
+html[data-theme="light"] .library-title-row h2 { color: #1c1b1a; font-family: var(--nz-font-serif); font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+html[data-theme="light"] .library-count,
+html[data-theme="light"] .library-caption,
+html[data-theme="light"] .list-filter-row,
+html[data-theme="light"] .list-footer { color: #7e7c76; }
+html[data-theme="light"] .list-footer { border-top-color: #e8e6e0; }
+html[data-theme="light"] .note-card:hover { background: #f5f4f1; }
+html[data-theme="light"] .note-card.active {
+  background: #ffffff;
+  border-color: #e8e6e0;
+  box-shadow: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
+}
+html[data-theme="light"] .note-card-title { color: #1c1b1a; font-weight: 600; }
+html[data-theme="light"] .note-card.active .note-card-title { color: #1c1b1a; }
+html[data-theme="light"] .note-card-sub { color: #7e7c76; }
+html[data-theme="light"] .note-card-sub .dot { background: #a8a59e; }
+html[data-theme="light"] .file-symbol {
+  background: #f5f4f1;
+  border-color: #e8e6e0;
+  color: #7e7c76;
+}
+html[data-theme="light"] .list-empty { color: #7e7c76; }
+html[data-theme="light"] .list-empty strong { color: #1c1b1a; }
+
+html[data-theme="light"] .workspace-main { background: #fdfdfc; }
+html[data-theme="light"] .reader-crumb { color: #7e7c76; }
+html[data-theme="light"] .reader-crumb strong { color: #4b4a46; }
+html[data-theme="light"] .reader-title {
+  font-family: var(--nz-font-serif);
+  font-weight: 500;
+  color: #1c1b1a;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+html[data-theme="light"] .reader-progress-fill { box-shadow: none; }
+
+/* ---------------- Dark: warm graphite & paper ---------------- */
+
+html[data-theme="dark"] {
+  --bg: #1a1917;
+  --side: #201f1d;
+  --panel: #262523;
+  --panel-raised: #2f2e2b;
+  --ink: #ecebe5;
+  --muted: #94918a;
+  --muted-2: #6d6a64;
+  --line: #33322e;
+  --line-strong: #443f39;
+  --paper-ink: #ecebe5;
+  --paper-muted: #94918a;
+}
+
+html[data-theme="dark"] body {
+  background: #1a1917;
+  color: #ecebe5;
+  font-family: var(--nz-font-sans);
+}
+
+html[data-theme="dark"] .sidebar {
+  background: #201f1d;
+  border-right-color: #33322e;
+}
+html[data-theme="dark"] .space-label,
+html[data-theme="dark"] .nav-heading { color: #6d6a64; }
+html[data-theme="dark"] .nav-item { color: #c9c6be; }
+html[data-theme="dark"] .nav-item .icon { color: #94918a; }
+html[data-theme="dark"] .nav-item:hover { background: #2f2e2b; color: #ecebe5; }
+html[data-theme="dark"] .nav-item.active { background: #38362f; color: #ecebe5; }
+html[data-theme="dark"] .new-note-side {
+  background: #262523;
+  border-color: #443f39;
+  color: #ecebe5;
+}
+html[data-theme="dark"] .new-note-side .shortcut { color: #94918a; border-color: #443f39; }
+html[data-theme="dark"] .storage-card { background: #262523; border-color: #33322e; }
+html[data-theme="dark"] .sidebar-profile { border-top-color: #33322e; }
+html[data-theme="dark"] .profile-name { color: #ecebe5; }
+
+html[data-theme="dark"] .topbar {
+  background: rgba(26, 25, 23, 0.92);
+  border-bottom-color: #33322e;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+html[data-theme="dark"] .global-search { background: #201f1d; border-color: #33322e; color: #94918a; }
+html[data-theme="dark"] .global-search input { color: #ecebe5; }
+html[data-theme="dark"] .top-context .crumb strong { color: #ecebe5; }
+html[data-theme="dark"] .account-menu {
+  background: #262523;
+  border-color: #443f39;
+  box-shadow: 0 30px 70px -22px rgba(0, 0, 0, 0.75);
+  border-radius: var(--nz-radius-lg);
+}
+
+html[data-theme="dark"] .library-pane { background: #1a1917; border-right-color: #33322e; }
+html[data-theme="dark"] .library-title-row h2 { color: #ecebe5; font-family: var(--nz-font-serif); font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+html[data-theme="dark"] .note-card:hover { background: #201f1d; }
+html[data-theme="dark"] .note-card.active { background: #262523; border-color: #33322e; }
+html[data-theme="dark"] .note-card-title { color: #ecebe5; font-weight: 600; }
+html[data-theme="dark"] .note-card.active .note-card-title { color: #ecebe5; }
+html[data-theme="dark"] .file-symbol { background: #262523; border-color: #33322e; color: #94918a; }
+html[data-theme="dark"] .list-footer { border-top-color: #33322e; }
+
+html[data-theme="dark"] .workspace-main { background: #1a1917; }
+html[data-theme="dark"] .reader-title { font-family: var(--nz-font-serif); font-weight: 500; color: #ecebe5; letter-spacing: -0.02em; line-height: 1.12; }
+
+/* ---------------- Shared refinements (both themes) ---------------- */
+
+/* Reader body reads more like a page: serif-leaning rhythm, generous leading */
+.note-view .reader-title { margin-bottom: 14px; }
+.note-view .reader-meta,
+.note-view .reader-date { letter-spacing: 0.01em; }
+
+/* Quieter, consistent radii on pop-overs and menus */
+.nz-popover,
+.account-menu,
+.note-card { border-radius: var(--nz-radius-md); }
+
+/* Hairlines: the reference uses thin rules rather than heavy borders */
+.sidebar-profile,
+.list-footer,
+.reader-toolbar-row { border-color: var(--line); }
+
+/* Primary actions: a little more presence, same accent */
+html[data-theme="light"] .top-new {
+  border-radius: var(--nz-radius-sm);
+  box-shadow: 0 1px 2px rgba(28, 27, 26, 0.08);
+}
+
+/* Focus rings stay visible on both palettes */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nz-accent) 80%, transparent);
+  outline-offset: 2px;
+}
+
+/* Gentle motion for interactive surfaces, respecting reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  .nav-item,
+  .note-card,
+  .icon-button,
+  .new-note-side {
+    transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  }
+}
