@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, Cloud, FileDown,
   FilePlus2, Folder, Menu, Mic2, Moon, Plus, Search, Settings2, Share2,
-  Sparkles, Sun, Tag, Trash2, X, Monitor,
+  Sparkles, Star, Sun, Tag, Trash2, X, Monitor, LayoutGrid, List, Keyboard,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -14,9 +14,10 @@ import { VersionConflictError } from "./api/client";
 import ChatPanel from "./components/ChatPanel";
 import { useOfflineSync } from "./hooks/useOfflineSync";
 import { useAuthStore } from "./store/auth";
-import { useUiStore } from "./store/ui";
+import { useUiStore, type LibrarySort, type LibraryView } from "./store/ui";
 import { resolveTheme } from "./theme";
 import { DIRECTIONS } from "./design-directions/directionMeta";
+import { countWords, readingMinutes, relativeTime } from "./lib/format";
 import "./workspace.css";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
@@ -187,6 +188,13 @@ function GoogleMark() {
   </svg>;
 }
 
+function sortNotes(notes: Note[], sort: LibrarySort): Note[] {
+  const copy = [...notes];
+  if (sort === "title") return copy.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base", numeric: true }));
+  if (sort === "oldest") return copy.sort((a, b) => Date.parse(a.updated_at) - Date.parse(b.updated_at));
+  return copy.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+}
+
 function SidebarShortcuts({ notes, onOpen }: { notes: Note[]; onOpen: (noteId: string) => void }) {
   const { t } = useTranslation();
   const favoriteNoteIds = useUiStore((state) => state.favoriteNoteIds);
@@ -304,7 +312,7 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
   onOpenChat: () => void;
   onShare: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<NoteInput>({
     title: note.title,
@@ -318,6 +326,15 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
   const [conflict, setConflict] = useState<VersionConflictError | null>(null);
   const [actionError, setActionError] = useState("");
   const timer = useRef<number | undefined>(undefined);
+  // A change is "pending" from the moment it is scheduled until it is sent. Pending changes must
+  // never be dropped when the user switches notes, closes the editor, or leaves the page.
+  const pendingRef = useRef(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const favoriteNoteIds = useUiStore((state) => state.favoriteNoteIds);
+  const toggleFavoriteNote = useUiStore((state) => state.toggleFavoriteNote);
+  const isFavorite = favoriteNoteIds.includes(note.id);
+  const words = useMemo(() => countWords(draft.body ?? ""), [draft.body]);
   const dirty = draft.title !== note.title || draft.body !== note.body
     || draft.folder_path !== note.folder_path || draft.kind !== note.kind;
   const childrenQuery = useQuery({
@@ -364,17 +381,66 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
   }, [note.id]);
 
   useEffect(() => {
-    if (!dirty || conflict) return;
+    // Nothing to send (reverted to the saved text, or a conflict needs a decision first).
+    if (!dirty || conflict) {
+      pendingRef.current = false;
+      return;
+    }
     setSaveState("unsaved");
+    pendingRef.current = true;
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
+      pendingRef.current = false;
       setSaveState("saving");
       save.mutate(note.version);
     }, 1000);
     return () => window.clearTimeout(timer.current);
   }, [draft, dirty, conflict]);
 
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Switching notes (or leaving the editor) sends any pending change immediately instead of
+  // discarding it with the debounce timer. The snapshot captured here belongs to the note being left.
+  useEffect(() => {
+    const leaving = note;
+    return () => {
+      if (!pendingRef.current) return;
+      window.clearTimeout(timer.current);
+      pendingRef.current = false;
+      // Read the latest version from the cache: earlier autosaves may have bumped it since this
+      // effect captured the note, and a stale version would be rejected as a conflict.
+      const latest = queryClient.getQueryData<Note>(noteDetailKey(ownerId, leaving.id)) ?? leaving;
+      void updateNote(leaving.id, latest.version, draftRef.current, latest)
+        .then(() => queryClient.invalidateQueries({ queryKey: noteListKey(ownerId) }))
+        .catch(() => undefined);
+    };
+    // Only the note identity should trigger a flush; draft changes are read through the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
+
+  // Warn before the tab closes while a change is still waiting to be sent.
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!pendingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, []);
+
+  // Cmd/Ctrl+S saves immediately. It also stops the browser's "save page" dialog.
+  useEffect(() => {
+    const saveNow = (event: KeyboardEvent) => {
+      if (!((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s")) return;
+      event.preventDefault();
+      if (conflict || !dirty) return;
+      window.clearTimeout(timer.current);
+      pendingRef.current = false;
+      setSaveState("saving");
+      save.mutate(note.version);
+    };
+    window.addEventListener("keydown", saveNow);
+    return () => window.removeEventListener("keydown", saveNow);
+  }, [conflict, dirty, note.version, save]);
 
   const keepMine = () => {
     if (!conflict) return;
@@ -393,6 +459,14 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
           {saveState === "saved" ? (note.sync_pending ? t("sync.waiting") : t("editor.saved")) : saveState === "saving" ? t("editor.saving") : saveState === "error" ? t("editor.saveError") : t("editor.unsaved")}
         </span>
         <div className="workspace-editor-actions">
+          <button
+            type="button"
+            className={`workspace-icon-button workspace-favorite-button ${isFavorite ? "is-active" : ""}`}
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? t("editor.unfavorite", { defaultValue: "Remove from favorites" }) : t("editor.favorite", { defaultValue: "Add to favorites" })}
+            title={isFavorite ? t("editor.unfavorite", { defaultValue: "Remove from favorites" }) : t("editor.favorite", { defaultValue: "Add to favorites" })}
+            onClick={() => toggleFavoriteNote(note.id)}
+          ><Star size={16} fill={isFavorite ? "currentColor" : "none"} /></button>
           <button className="workspace-icon-button" aria-label={t("editor.ask")} onClick={onOpenChat}><Sparkles size={16} /></button>
           <button className="workspace-icon-button" aria-label={t("editor.share")} onClick={onShare}><Share2 size={16} /></button>
           <button className="workspace-secondary" onClick={onStartRecording}><Mic2 size={15} /><span>{t("editor.record")}</span></button>
@@ -461,6 +535,13 @@ function NoteEditor({ note, ownerId, notes, onClose, onDelete, onStartRecording,
           {!childrenQuery.data?.length && <p className="workspace-muted">{t("editor.subnotesEmpty")}</p>}
         </div>
       </div>
+      <footer className="workspace-editor-footer" aria-label={t("editor.noteStats", { defaultValue: "Note statistics" })}>
+        <span>{words.toLocaleString(i18n.language)} {t("editor.wordsLabel", { defaultValue: "words" })}</span>
+        <span aria-hidden="true">·</span>
+        <span>{readingMinutes(words)} {t("editor.minRead", { defaultValue: "min read" })}</span>
+        <span aria-hidden="true">·</span>
+        <time dateTime={note.updated_at}>{t("editor.editedPrefix", { defaultValue: "Edited" })} {relativeTime(note.updated_at, i18n.language)}</time>
+      </footer>
     </section>
   );
 }
@@ -486,7 +567,7 @@ async function createChildNote(parent: Note, queryClient: ReturnType<typeof useQ
 }
 
 export default function WorkspaceApp() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { noteId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -503,6 +584,12 @@ export default function WorkspaceApp() {
   const setReaderTextSize = useUiStore((state) => state.setReaderTextSize);
   const readerWidth = useUiStore((state) => state.readerWidth);
   const setReaderWidth = useUiStore((state) => state.setReaderWidth);
+  const favoriteNoteIds = useUiStore((state) => state.favoriteNoteIds);
+  const toggleFavoriteNote = useUiStore((state) => state.toggleFavoriteNote);
+  const librarySort = useUiStore((state) => state.librarySort);
+  const setLibrarySort = useUiStore((state) => state.setLibrarySort);
+  const libraryView = useUiStore((state) => state.libraryView);
+  const setLibraryView = useUiStore((state) => state.setLibraryView);
   const language = useUiStore((state) => state.language);
   const setLanguage = useUiStore((state) => state.setLanguage);
   const ownerId = user?.uid ?? "";
@@ -513,6 +600,8 @@ export default function WorkspaceApp() {
   const [chatOpen, setChatOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -577,6 +666,7 @@ export default function WorkspaceApp() {
         setPaletteOpen(true);
       } else if (event.key === "Escape") {
         setPaletteOpen(false);
+        setShortcutsOpen(false);
       }
     };
     window.addEventListener("keydown", onShortcut);
@@ -674,12 +764,13 @@ export default function WorkspaceApp() {
   const allNotes = notesQuery.data ?? [];
   const matchingNotes = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return allNotes.filter((note) => {
+    const filtered = allNotes.filter((note) => {
       const matchesFolder = !selectedFolder || note.folder_path === selectedFolder || note.folder_path.startsWith(`${selectedFolder}/`);
       const matchesSearch = !query || `${note.title} ${note.body} ${note.folder_path}`.toLocaleLowerCase().includes(query);
       return matchesFolder && matchesSearch;
     });
-  }, [allNotes, search, selectedFolder]);
+    return sortNotes(filtered, librarySort);
+  }, [allNotes, search, selectedFolder, librarySort]);
   const paletteNotes = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return allNotes.slice(0, 8);
@@ -695,6 +786,29 @@ export default function WorkspaceApp() {
       setNotice(error instanceof Error ? error.message : t("errors.createNote"));
     }
   };
+  // Single-key shortcuts, ignored while typing or when a modifier is held.
+  const newNoteRef = useRef(newNote);
+  newNoteRef.current = newNote;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const typing = Boolean(target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)));
+      if (typing) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        searchInput.current?.focus();
+      } else if (event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        void newNoteRef.current();
+      } else if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const startRecording = async (sourceNote?: Note) => {
     setNotice("");
     try {
@@ -763,9 +877,10 @@ export default function WorkspaceApp() {
       <header className="workspace-topbar">
         <button className="workspace-menu-button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label={t("errors.toggleNavigation")}><Menu size={19} /></button>
         <button className="workspace-logo" onClick={() => navigate("/")} aria-label={t("errors.home")}><span><Sparkles size={15} /></span>notez<span className="workspace-logo-period">.</span></button>
-        <label className="workspace-global-search"><Search size={16} /><input value={search} onFocus={() => setPaletteOpen(true)} onChange={(event) => setSearch(event.target.value)} placeholder={t("library.search")} aria-label={t("library.search")} /><kbd>⌘ K</kbd></label>
+        <label className="workspace-global-search"><Search size={16} /><input ref={searchInput} value={search} onFocus={() => setPaletteOpen(true)} onChange={(event) => setSearch(event.target.value)} placeholder={t("library.search")} aria-label={t("library.search")} /><kbd>⌘ K</kbd></label>
         <div className="workspace-top-actions">
           <button className="workspace-icon-button" aria-label={t("errors.toggleAppearance")} onClick={() => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark")}>{resolveTheme(theme) === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
+          <button className="workspace-icon-button workspace-keyboard-button" aria-label={t("shortcuts.title", { defaultValue: "Keyboard shortcuts" })} title={t("shortcuts.title", { defaultValue: "Keyboard shortcuts" })} onClick={() => setShortcutsOpen(true)}><Keyboard size={17} /></button>
           <button className="workspace-icon-button" aria-label={t("errors.settings")} onClick={() => setSettingsOpen(true)}><Settings2 size={17} /></button>
           <button className="workspace-user" title={user.email ?? t("common.guest")} aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}>{(user.displayName ?? user.email ?? "G").slice(0, 1).toUpperCase()}</button>
           {profileOpen && (
@@ -814,28 +929,86 @@ export default function WorkspaceApp() {
                   <button className="workspace-primary" onClick={() => void newNote()} disabled={createMutation.isPending}><Plus size={16} /> {t("library.newNote")}</button>
                 </div>
               </div>
-              <div className="workspace-library-toolbar"><span>{selectedFolder || t("library.allThoughts")} <small>{matchingNotes.length}</small></span><button className="workspace-chat-trigger" onClick={() => setChatOpen(true)}><Sparkles size={15} /> {t("library.ask")}</button></div>
-              {notesQuery.isPending ? <div className="workspace-empty-state">{t("library.gathering")}</div> : notesQuery.error ? (
+              <div className="workspace-library-toolbar">
+                <span>{selectedFolder || t("library.allThoughts")} <small>{matchingNotes.length}</small></span>
+                <div className="workspace-library-tools">
+                  <label className="workspace-sort">
+                    <span className="workspace-visually-hidden">{t("library.sortLabel", { defaultValue: "Sort notes" })}</span>
+                    <select value={librarySort} onChange={(event) => setLibrarySort(event.target.value as LibrarySort)}>
+                      <option value="recent">{t("library.sortRecent", { defaultValue: "Recently edited" })}</option>
+                      <option value="title">{t("library.sortTitle", { defaultValue: "Title A–Z" })}</option>
+                      <option value="oldest">{t("library.sortOldest", { defaultValue: "Oldest first" })}</option>
+                    </select>
+                  </label>
+                  <div className="workspace-segmented workspace-view-toggle" role="group" aria-label={t("library.viewLabel", { defaultValue: "View" })}>
+                    <button type="button" aria-pressed={libraryView === "grid"} className={libraryView === "grid" ? "is-selected" : ""} aria-label={t("library.gridView", { defaultValue: "Grid view" })} title={t("library.gridView", { defaultValue: "Grid view" })} onClick={() => setLibraryView("grid" as LibraryView)}><LayoutGrid size={14} /></button>
+                    <button type="button" aria-pressed={libraryView === "list"} className={libraryView === "list" ? "is-selected" : ""} aria-label={t("library.listView", { defaultValue: "List view" })} title={t("library.listView", { defaultValue: "List view" })} onClick={() => setLibraryView("list" as LibraryView)}><List size={14} /></button>
+                  </div>
+                  <button className="workspace-chat-trigger" onClick={() => setChatOpen(true)}><Sparkles size={15} /> {t("library.ask")}</button>
+                </div>
+              </div>
+              {notesQuery.isPending ? (
+                <div className="workspace-note-grid workspace-skeleton-grid" aria-busy="true" aria-label={t("library.gathering")}>
+                  {[0, 1, 2, 3].map((index) => <div key={index} className="workspace-skeleton-card" aria-hidden="true"><span /><span /><span /></div>)}
+                </div>
+              ) : notesQuery.error ? (
                 <div className="workspace-empty-state workspace-error-state" role="alert">
                   <h2>{t("errors.library")}</h2><p>{notesQuery.error instanceof Error ? notesQuery.error.message : t("errors.retry")}</p>
                   <button className="workspace-secondary" onClick={() => void notesQuery.refetch()}>{t("errors.retry")}</button>
                 </div>
               ) : matchingNotes.length ? (
-                <div className="workspace-note-grid">
-                  {matchingNotes.map((note) => (
-                    <button
-                      key={note.id}
-                      className="workspace-note-card"
-                      draggable
-                      onDragStart={(event) => event.dataTransfer.setData("text/note-id", note.id)}
-                      onClick={() => navigate(`/notes/${note.id}`)}
-                    >
-                      <span className="workspace-card-meta"><span className="workspace-kind"><i />{note.kind}</span><time>{new Date(note.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time></span>
-                      <strong>{note.title || t("editor.titlePlaceholder")}</strong>
-                      <p>{note.body.slice(0, 170) || t("errors.freshThought")}</p>
-                      <span className="workspace-card-folder"><Folder size={12} />{note.folder_path || t("common.myNotes")}<ArrowRight size={14} /></span>
-                    </button>
-                  ))}
+                <div className={`workspace-note-grid ${libraryView === "list" ? "is-list" : ""}`}>
+                  {matchingNotes.map((note) => {
+                    const isFavorite = favoriteNoteIds.includes(note.id);
+                    const open = () => navigate(`/notes/${note.id}`);
+                    return (
+                      <div
+                        key={note.id}
+                        className={`workspace-note-card ${isFavorite ? "is-favorite" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        draggable
+                        onDragStart={(event) => event.dataTransfer.setData("text/note-id", note.id)}
+                        onClick={open}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            open();
+                          }
+                        }}
+                      >
+                        <span className="workspace-card-meta">
+                          <span className="workspace-kind"><i />{note.kind}</span>
+                          <span className="workspace-card-actions">
+                            <button
+                              type="button"
+                              className={`workspace-card-star ${isFavorite ? "is-active" : ""}`}
+                              aria-pressed={isFavorite}
+                              aria-label={isFavorite ? t("editor.unfavorite", { defaultValue: "Remove from favorites" }) : t("editor.favorite", { defaultValue: "Add to favorites" })}
+                              title={isFavorite ? t("editor.unfavorite", { defaultValue: "Remove from favorites" }) : t("editor.favorite", { defaultValue: "Add to favorites" })}
+                              onClick={(event) => { event.stopPropagation(); toggleFavoriteNote(note.id); }}
+                            ><Star size={14} fill={isFavorite ? "currentColor" : "none"} /></button>
+                            <time dateTime={note.updated_at}>{relativeTime(note.updated_at, i18n.language)}</time>
+                          </span>
+                        </span>
+                        <strong>{note.title || t("editor.titlePlaceholder")}</strong>
+                        <p>{note.body.slice(0, 170) || t("errors.freshThought")}</p>
+                        <span className="workspace-card-folder">
+                          <Folder size={12} />{note.folder_path || t("common.myNotes")}
+                          <span className="workspace-card-reading">{readingMinutes(countWords(note.body))} {t("editor.minRead", { defaultValue: "min read" })}</span>
+                          <ArrowRight size={14} />
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : search.trim() && allNotes.length ? (
+                <div className="workspace-empty-state">
+                  <span className="workspace-empty-icon"><Search size={20} /></span>
+                  <h2>{t("library.noMatchTitle", { defaultValue: "No matching notes" })}</h2>
+                  <p>{t("library.noMatchDescription", { defaultValue: "Nothing here matches “{{query}}”. Try a different word or clear the search.", query: search.trim() })}</p>
+                  <button className="workspace-secondary" onClick={() => setSearch("")}>{t("library.clearSearch", { defaultValue: "Clear search" })}</button>
                 </div>
               ) : (
                 <div className="workspace-empty-state">
@@ -1040,6 +1213,34 @@ export default function WorkspaceApp() {
                 </div>
               </section>
             </div>
+          </section>
+        </div>
+      )}
+      {shortcutsOpen && (
+        <div className="workspace-command-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShortcutsOpen(false); }}>
+          <section className="workspace-shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-shortcuts-title">
+            <header className="workspace-settings-header">
+              <div>
+                <p className="workspace-eyebrow">{t("shortcuts.eyebrow", { defaultValue: "Speed" })}</p>
+                <h2 id="workspace-shortcuts-title">{t("shortcuts.title", { defaultValue: "Keyboard shortcuts" })}</h2>
+              </div>
+              <button className="workspace-icon-button" aria-label={t("errors.close")} onClick={() => setShortcutsOpen(false)}><X size={16} /></button>
+            </header>
+            <dl className="workspace-shortcut-table">
+              {([
+                [t("shortcuts.palette", { defaultValue: "Open command palette and search" }), ["⌘", "K"]],
+                [t("shortcuts.focusSearch", { defaultValue: "Focus search" }), ["/"]],
+                [t("shortcuts.newNote", { defaultValue: "New note" }), ["N"]],
+                [t("shortcuts.save", { defaultValue: "Save the open note now" }), ["⌘", "S"]],
+                [t("shortcuts.help", { defaultValue: "Show this list" }), ["?"]],
+                [t("shortcuts.close", { defaultValue: "Close dialogs" }), ["Esc"]],
+              ] as const).map(([label, keys]) => (
+                <div className="workspace-shortcut-row" key={label}>
+                  <dt>{label}</dt>
+                  <dd>{keys.map((key) => <kbd key={key}>{key}</kbd>)}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
         </div>
       )}
